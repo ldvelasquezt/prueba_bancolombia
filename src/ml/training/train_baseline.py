@@ -44,6 +44,10 @@ CAT_COLS = [
     "lag1_alter_posible2_2", "lag1_alter_posible3_2", "prevmes_marca_pago",
     "genero_cli", "estado_civil", "tipo_vivienda", "nivel_academico",
     "ocup", "sector", "declarante",
+    "lag1_marca_alt_apli", "lag1_marca_alternativa_orig", "lag1_alternativa_aplicada_agr",
+    "lag1_descripcion_ranking_mejor_ult",
+    "lag1_alter_posible1_2_familia", "lag1_alter_posible2_2_familia", "lag1_alter_posible3_2_familia",
+    "lag2_alternativa_aplicada_agr", "lag2_marca_alternativa_orig",
 ]
 
 FIT_MONTHS = [202309, 202310]

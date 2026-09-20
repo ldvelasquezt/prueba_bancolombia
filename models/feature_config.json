@@ -24,13 +24,25 @@
     "lag1_cant_promesas_cumplidas_binario",
     "lag1_cant_acuerdo",
     "lag1_cant_acuerdo_binario",
+    "lag1_marca_alt_apli",
+    "lag1_marca_alternativa_orig",
+    "lag1_alternativa_aplicada_agr",
+    "lag1_descripcion_ranking_mejor_ult",
+    "lag1_pago_mes",
+    "lag1_porc_pago_mes",
     "lag1_veces_en_panel_acumulado",
+    "lag1_var_rpta_alt",
     "obligacion_nueva_en_panel",
     "lag2_dias_mora_fin",
+    "lag2_var_rpta_alt",
+    "lag2_alternativa_aplicada_agr",
+    "lag2_marca_alternativa_orig",
     "mora_trend_1m",
+    "fatiga_misma_alternativa",
     "prob_propension",
     "prob_alrt_temprana",
     "prob_auto_cura",
+    "prevmes_lote",
     "prob_prob_propension_roll3m",
     "prob_prob_alrt_temprana_roll3m",
     "prob_prob_auto_cura_roll3m",
@@ -61,10 +73,18 @@
     "egresos_mes",
     "tot_patrimonio",
     "smmlv",
+    "antiguedad_meses",
     "prevmes_endeudamiento_ratio",
     "lag1_vencido_sobre_obligacion",
     "lag1_tasa_cumplimiento_promesa",
-    "lag1_tasa_contacto_efectivo"
+    "lag1_tasa_contacto_efectivo",
+    "lag1_alter_posible1_2_familia",
+    "lag1_alter_posible2_2_familia",
+    "lag1_alter_posible3_2_familia",
+    "lag1_cuotas_restantes_aprox",
+    "lag1_mora_x_tendencia",
+    "prevmes_shock_pago",
+    "lag1_concentracion_deuda_banco"
   ],
   "cat_cols": [
     "lag1_banca",
@@ -83,7 +103,16 @@
     "nivel_academico",
     "ocup",
     "sector",
-    "declarante"
+    "declarante",
+    "lag1_marca_alt_apli",
+    "lag1_marca_alternativa_orig",
+    "lag1_alternativa_aplicada_agr",
+    "lag1_descripcion_ranking_mejor_ult",
+    "lag1_alter_posible1_2_familia",
+    "lag1_alter_posible2_2_familia",
+    "lag1_alter_posible3_2_familia",
+    "lag2_alternativa_aplicada_agr",
+    "lag2_marca_alternativa_orig"
   ],
   "cat_categories": {
     "lag1_banca": [
@@ -290,10 +319,88 @@
       "MISSING",
       "N",
       "S"
+    ],
+    "lag1_marca_alt_apli": [
+      "MISSING",
+      "NO",
+      "SI"
+    ],
+    "lag1_marca_alternativa_orig": [
+      "Acepta Alternativa",
+      "MISSING",
+      "N.A",
+      "No Acepta Alternativa"
+    ],
+    "lag1_alternativa_aplicada_agr": [
+      "AMPLIACION",
+      "COMBO",
+      "CONDONACION",
+      "CONSOLIDACION",
+      "MISSING",
+      "PERIODO DE GRACIA",
+      "PRORROGA"
+    ],
+    "lag1_descripcion_ranking_mejor_ult": [
+      "ACEPTA ACUERDO COBRANZAS",
+      "ACEPTA ALTERNATIVA",
+      "APROBADA NEGOCIACION COBRANZAS",
+      "CLIENTE AL DIA",
+      "CONTACTO WHATSTAPP",
+      "GESTION MAQUINA",
+      "ILOCALIZADO",
+      "INTERESADO ALTERNATIVA",
+      "MANIFIESTA YA PAGO",
+      "MENSAJE INFORMATIVO - SIN CONTACTO",
+      "MISSING",
+      "NO ACEPTA ACUERDO",
+      "NO ACEPTA ALTERNATIVA",
+      "NO CONTESTA",
+      "NO RECIBE INFORMACION",
+      "PLAN DE COMPROMISO CUMPLIDO",
+      "PLAN DE PAGO",
+      "SIN ALTERNATIVA"
+    ],
+    "lag1_alter_posible1_2_familia": [
+      "AH",
+      "CH",
+      "CON",
+      "LH",
+      "MISSING",
+      "TDC"
+    ],
+    "lag1_alter_posible2_2_familia": [
+      "CH",
+      "CON",
+      "G",
+      "LH",
+      "MISSING",
+      "TDC"
+    ],
+    "lag1_alter_posible3_2_familia": [
+      "CH",
+      "CON",
+      "D",
+      "LH",
+      "MISSING"
+    ],
+    "lag2_alternativa_aplicada_agr": [
+      "AMPLIACION",
+      "COMBO",
+      "CONDONACION",
+      "CONSOLIDACION",
+      "MISSING",
+      "PERIODO DE GRACIA",
+      "PRORROGA"
+    ],
+    "lag2_marca_alternativa_orig": [
+      "Acepta Alternativa",
+      "MISSING",
+      "N.A",
+      "No Acepta Alternativa"
     ]
   },
   "params": {
-    "n_estimators": 356,
+    "n_estimators": 399,
     "max_depth": 8,
     "learning_rate": 0.0408,
     "subsample": 0.958,
@@ -301,14 +408,14 @@
     "min_child_weight": 10,
     "reg_lambda": 7.12
   },
-  "threshold": 0.32000000000000006,
+  "threshold": 0.34,
   "fit_months": [
     202309,
     202310
   ],
   "calib_month": 202311,
   "report_month": 202312,
-  "f1_calib": 0.6879986994865681,
-  "f1_report": 0.6566628687789386,
-  "auc_report": 0.681082812923069
+  "f1_calib": 0.6991448339086963,
+  "f1_report": 0.6707394287865565,
+  "auc_report": 0.7224330690447884
 }
