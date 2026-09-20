@@ -17,6 +17,7 @@
     "lag1_alter_posible1_2",
     "lag1_alter_posible2_2",
     "lag1_alter_posible3_2",
+    "obligacion_nueva_en_panel",
     "lote",
     "prob_propension",
     "prob_alrt_temprana",
@@ -40,7 +41,9 @@
     "tot_pasivos",
     "egresos_mes",
     "tot_patrimonio",
-    "smmlv"
+    "smmlv",
+    "prevmes_endeudamiento_ratio",
+    "lag1_vencido_sobre_obligacion"
   ],
   "cat_cols": [
     "lag1_banca",
@@ -268,8 +271,17 @@
       "S"
     ]
   },
-  "threshold": 0.34,
+  "params": {
+    "n_estimators": 600,
+    "max_depth": 8,
+    "learning_rate": 0.04077291318542002,
+    "subsample": 0.9581595705518683,
+    "colsample_bytree": 0.8825284081348668,
+    "min_child_weight": 10,
+    "reg_lambda": 7.122203317722881
+  },
+  "threshold": 0.33,
   "valid_month": 202312,
-  "f1_valid": 0.6634472154149248,
-  "auc_valid": 0.7038457551993419
+  "f1_valid": 0.6656323227153128,
+  "auc_valid": 0.7074906292728422
 }

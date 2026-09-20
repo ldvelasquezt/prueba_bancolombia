@@ -1,14 +1,20 @@
 """
-Entrena un modelo baseline (XGBoost) de propensión a aceptar una opción de pago.
+Entrena el modelo de propensión a aceptar una opción de pago (XGBoost).
 
 Validación temporal: entrena con sep-nov 2023 y valida con dic 2023 (el mes más
-reciente disponible), simulando el escenario real de pronóstico a un mes.
-El umbral de decisión se calibra maximizando F1 sobre el mes de validación.
+reciente disponible), simulando el escenario real de pronóstico a un mes. El
+umbral de decisión se calibra maximizando F1 sobre el mes de validación.
+
+Búsqueda de hiperparámetros con Optuna (opcional, --tune): optimiza F1 sobre el
+mismo split temporal, sin usar folds aleatorios (evita fuga temporal).
 """
+import argparse
 import json
+import os
 
 import mlflow
 import numpy as np
+import optuna
 import pandas as pd
 import xgboost as xgb
 from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_score
@@ -30,6 +36,16 @@ CAT_COLS = [
 
 VALID_MONTH = 202312
 
+DEFAULT_PARAMS = dict(
+    n_estimators=500,
+    max_depth=5,
+    learning_rate=0.05,
+    subsample=0.8,
+    colsample_bytree=0.8,
+    min_child_weight=5,
+    reg_lambda=1.0,
+)
+
 
 def prep_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -49,7 +65,48 @@ def best_threshold(y_true, y_prob) -> tuple[float, float]:
     return best_t, best_f1
 
 
+def fit_and_eval(params, X_train, y_train, X_valid, y_valid):
+    model = xgb.XGBClassifier(
+        **params,
+        tree_method="hist",
+        enable_categorical=True,
+        eval_metric="logloss",
+        early_stopping_rounds=30,
+        random_state=42,
+    )
+    model.fit(X_train, y_train, eval_set=[(X_valid, y_valid)], verbose=False)
+    y_prob = model.predict_proba(X_valid)[:, 1]
+    threshold, f1_valid = best_threshold(y_valid, y_prob)
+    return model, y_prob, threshold, f1_valid
+
+
+def tune(X_train, y_train, X_valid, y_valid, n_trials=25):
+    def objective(trial):
+        params = dict(
+            n_estimators=trial.suggest_int("n_estimators", 200, 800, step=100),
+            max_depth=trial.suggest_int("max_depth", 3, 8),
+            learning_rate=trial.suggest_float("learning_rate", 0.01, 0.15, log=True),
+            subsample=trial.suggest_float("subsample", 0.6, 1.0),
+            colsample_bytree=trial.suggest_float("colsample_bytree", 0.5, 1.0),
+            min_child_weight=trial.suggest_int("min_child_weight", 1, 20),
+            reg_lambda=trial.suggest_float("reg_lambda", 0.1, 10.0, log=True),
+        )
+        _, _, _, f1_valid = fit_and_eval(params, X_train, y_train, X_valid, y_valid)
+        return f1_valid
+
+    study = optuna.create_study(direction="maximize")
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
+    print(f"\nMejor F1 en búsqueda: {study.best_value:.4f}")
+    print(f"Mejores params: {study.best_params}")
+    return study.best_params
+
+
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--tune", action="store_true", help="Ejecuta búsqueda de hiperparámetros con Optuna")
+    parser.add_argument("--n-trials", type=int, default=25)
+    args = parser.parse_args()
+
     train_full = pd.read_parquet(f"{DATA}/train_full.parquet")
     train_full = prep_features(train_full)
 
@@ -64,32 +121,19 @@ def main():
     print(f"Train: {X_train.shape} ({sorted(train_full.loc[train_mask, 'fecha_var_rpta_alt'].unique())})")
     print(f"Valid: {X_valid.shape} ({sorted(train_full.loc[valid_mask, 'fecha_var_rpta_alt'].unique())})")
 
-    params = dict(
-        n_estimators=500,
-        max_depth=5,
-        learning_rate=0.05,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        min_child_weight=5,
-        reg_lambda=1.0,
-        tree_method="hist",
-        enable_categorical=True,
-        eval_metric="logloss",
-        early_stopping_rounds=30,
-        random_state=42,
-    )
+    if args.tune:
+        params = tune(X_train, y_train, X_valid, y_valid, n_trials=args.n_trials)
+    else:
+        params = DEFAULT_PARAMS
 
     mlflow.set_experiment("propension_opciones_pago")
-    with mlflow.start_run(run_name="xgb_baseline_lag1"):
+    with mlflow.start_run(run_name="xgb_tuned" if args.tune else "xgb_baseline"):
         mlflow.log_params(params)
         mlflow.log_param("valid_month", VALID_MONTH)
         mlflow.log_param("n_features", len(feature_cols))
+        mlflow.log_param("tuned", args.tune)
 
-        model = xgb.XGBClassifier(**params)
-        model.fit(X_train, y_train, eval_set=[(X_valid, y_valid)], verbose=False)
-
-        y_prob = model.predict_proba(X_valid)[:, 1]
-        threshold, f1_valid = best_threshold(y_valid, y_prob)
+        model, y_prob, threshold, f1_valid = fit_and_eval(params, X_train, y_train, X_valid, y_valid)
         auc = roc_auc_score(y_valid, y_prob)
         precision = precision_score(y_valid, (y_prob >= threshold).astype(int))
         recall = recall_score(y_valid, (y_prob >= threshold).astype(int))
@@ -109,7 +153,6 @@ def main():
 
         mlflow.xgboost.log_model(model, name="model")
 
-        import os
         os.makedirs(MODELS, exist_ok=True)
         model.save_model(f"{MODELS}/xgb_baseline.json")
         cat_categories = {c: X_train[c].cat.categories.tolist() for c in CAT_COLS}
@@ -118,6 +161,7 @@ def main():
                 "feature_cols": feature_cols,
                 "cat_cols": CAT_COLS,
                 "cat_categories": cat_categories,
+                "params": params,
                 "threshold": threshold,
                 "valid_month": VALID_MONTH,
                 "f1_valid": f1_valid,

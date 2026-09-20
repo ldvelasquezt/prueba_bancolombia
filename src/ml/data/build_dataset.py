@@ -68,6 +68,10 @@ def build_lag_struct(trtest_full: pd.DataFrame) -> pd.DataFrame:
 
 def enrich(df: pd.DataFrame, lag_struct: pd.DataFrame) -> pd.DataFrame:
     df = df.merge(lag_struct, on=ID_COLS + ["mes_prev"], how="left")
+    # La obligación no aparecía en trtest el mes anterior: puede indicar que apenas
+    # entró en mora, o que no estaba en gestión directa/aliados el mes pasado. Se
+    # deja como señal explícita en vez de dejarlo como nulo "silencioso".
+    df["obligacion_nueva_en_panel"] = df["lag1_dias_mora_fin"].isna().astype(int)
 
     prob = pd.read_csv(f"{RAW}/prueba_op_probabilidad_oblig_base_hist_enmascarado_completa.csv",
                         usecols=PROB_COLS)
@@ -102,6 +106,9 @@ def enrich(df: pd.DataFrame, lag_struct: pd.DataFrame) -> pd.DataFrame:
     customer = customer.sort_values("mes_prev")
     df = df.sort_values("mes_prev")
     df = pd.merge_asof(df, customer, on="mes_prev", by="nit_enmascarado", direction="backward")
+
+    df["prevmes_endeudamiento_ratio"] = df["tot_pasivos"] / df["total_ing"].replace(0, pd.NA)
+    df["lag1_vencido_sobre_obligacion"] = df["lag1_vlr_vencido"] / df["lag1_vlr_obligacion"].replace(0, pd.NA)
 
     return df
 
