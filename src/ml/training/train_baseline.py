@@ -37,13 +37,13 @@ CAT_COLS = [
 VALID_MONTH = 202312
 
 DEFAULT_PARAMS = dict(
-    n_estimators=500,
-    max_depth=5,
-    learning_rate=0.05,
-    subsample=0.8,
-    colsample_bytree=0.8,
-    min_child_weight=5,
-    reg_lambda=1.0,
+    n_estimators=600,
+    max_depth=8,
+    learning_rate=0.0408,
+    subsample=0.958,
+    colsample_bytree=0.883,
+    min_child_weight=10,
+    reg_lambda=7.12,
 )
 
 
