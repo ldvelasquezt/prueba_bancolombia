@@ -42,6 +42,18 @@ STRUCTURAL_COLS = [
     "alter_posible1_2", "alter_posible2_2", "alter_posible3_2",
 ]
 
+# Columnas de gestión/comportamiento de trtest: contemporáneas al mes que describen
+# (contactabilidad, promesas de pago, acuerdos), por lo que NUNCA se usan del mismo
+# mes que el target. Solo se traen con 1 mes de rezago vía el mismo mecanismo de
+# `build_lag_struct`, igual que STRUCTURAL_COLS. Según contexto de negocio, la tasa de
+# cumplimiento de promesas y la intensidad/efectividad de contacto del mes anterior
+# están entre los predictores más fuertes de aceptación de una opción de pago.
+GESTION_COLS = [
+    "cant_gestiones", "cant_gestiones_binario", "rpc",
+    "promesas_cumplidas", "cant_promesas_cumplidas_binario",
+    "cant_acuerdo", "cant_acuerdo_binario",
+]
+
 PROB_VALUE_COLS = ["prob_propension", "prob_alrt_temprana", "prob_auto_cura"]
 CUOTAS_VALUE_COLS = ["porc_pago", "pago_total"]
 
@@ -65,10 +77,12 @@ def next_yyyymm(x: pd.Series) -> pd.Series:
 
 
 def build_lag_struct(trtest_full: pd.DataFrame) -> pd.DataFrame:
-    """Usa cada fila de trtest como fuente de lag estructural para el mes siguiente."""
-    lag = trtest_full[ID_COLS + ["fecha_var_rpta_alt"] + STRUCTURAL_COLS].copy()
+    """Usa cada fila de trtest (estructurales + gestión + vintage) como fuente de
+    lag para el mes siguiente."""
+    lag_cols = STRUCTURAL_COLS + GESTION_COLS + ["veces_en_panel_acumulado"]
+    lag = trtest_full[ID_COLS + ["fecha_var_rpta_alt"] + lag_cols].copy()
     lag = lag.rename(columns={"fecha_var_rpta_alt": "mes_prev"})
-    lag = lag.rename(columns={c: f"lag1_{c}" for c in STRUCTURAL_COLS})
+    lag = lag.rename(columns={c: f"lag1_{c}" for c in lag_cols})
     lag = lag.drop_duplicates(subset=ID_COLS + ["mes_prev"], keep="last")
     return lag
 
@@ -129,6 +143,13 @@ def enrich(df: pd.DataFrame, lag_struct: pd.DataFrame, mora_trend: pd.DataFrame,
     # deja como señal explícita en vez de dejarlo como nulo "silencioso".
     df["obligacion_nueva_en_panel"] = df["lag1_dias_mora_fin"].isna().astype(int)
 
+    # Para los conteos de gestión, "sin dato" y "cero gestiones/promesas" son la misma
+    # cosa en la práctica (no hubo panel = no hubo gestión registrada), a diferencia de
+    # variables como mora/saldo donde NaN sí es genuinamente "desconocido". Rellenar
+    # con 0 le da a XGBoost una señal más clara que dejarlo como NaN.
+    for c in [f"lag1_{g}" for g in GESTION_COLS]:
+        df[c] = df[c].fillna(0)
+
     df = df.merge(mora_trend, on=ID_COLS + ["mes_prev"], how="left")
     df["mora_trend_1m"] = df["lag1_dias_mora_fin"] - df["lag2_dias_mora_fin"]
 
@@ -152,14 +173,31 @@ def enrich(df: pd.DataFrame, lag_struct: pd.DataFrame, mora_trend: pd.DataFrame,
     df["prevmes_endeudamiento_ratio"] = df["tot_pasivos"] / df["total_ing"].replace(0, pd.NA)
     df["lag1_vencido_sobre_obligacion"] = df["lag1_vlr_vencido"] / df["lag1_vlr_obligacion"].replace(0, pd.NA)
 
+    # PTP kept rate (promesas/acuerdos cumplidos vs. hechos) e intensidad de contacto
+    # efectivo del mes anterior: según contexto de negocio, entre los predictores más
+    # fuertes de aceptación (y de riesgo de reincidencia si la tasa es baja).
+    df["lag1_tasa_cumplimiento_promesa"] = (
+        df["lag1_promesas_cumplidas"] / df["lag1_cant_acuerdo"].replace(0, pd.NA)
+    )
+    df["lag1_tasa_contacto_efectivo"] = (
+        df["lag1_rpc"] / df["lag1_cant_gestiones"].replace(0, pd.NA)
+    )
+
     return df
 
 
 def main():
     trtest_full = pd.read_csv(
         f"{RAW}/prueba_op_base_pivot_var_rpta_alt_enmascarado_trtest.csv",
-        usecols=ID_COLS + ["fecha_var_rpta_alt", "var_rpta_alt"] + STRUCTURAL_COLS,
+        usecols=ID_COLS + ["fecha_var_rpta_alt", "var_rpta_alt"] + STRUCTURAL_COLS + GESTION_COLS,
     )
+    # Proxy de "mora primeriza vs. recurrente": cuántas veces (incluyendo el mes
+    # actual) ha aparecido la obligación en el panel de gestión hasta ese punto.
+    # Panel disperso (~27% de persistencia mes a mes, ver EDA), así que esto capta
+    # algo distinto a dias_mora: cuántos ciclos de entrada a mora ha tenido.
+    trtest_full = trtest_full.sort_values(ID_COLS + ["fecha_var_rpta_alt"])
+    trtest_full["veces_en_panel_acumulado"] = trtest_full.groupby(ID_COLS).cumcount() + 1
+
     lag_struct = build_lag_struct(trtest_full)
     mora_trend = build_mora_trend(lag_struct)
 

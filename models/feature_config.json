@@ -17,6 +17,14 @@
     "lag1_alter_posible1_2",
     "lag1_alter_posible2_2",
     "lag1_alter_posible3_2",
+    "lag1_cant_gestiones",
+    "lag1_cant_gestiones_binario",
+    "lag1_rpc",
+    "lag1_promesas_cumplidas",
+    "lag1_cant_promesas_cumplidas_binario",
+    "lag1_cant_acuerdo",
+    "lag1_cant_acuerdo_binario",
+    "lag1_veces_en_panel_acumulado",
     "obligacion_nueva_en_panel",
     "lag2_dias_mora_fin",
     "mora_trend_1m",
@@ -54,7 +62,9 @@
     "tot_patrimonio",
     "smmlv",
     "prevmes_endeudamiento_ratio",
-    "lag1_vencido_sobre_obligacion"
+    "lag1_vencido_sobre_obligacion",
+    "lag1_tasa_cumplimiento_promesa",
+    "lag1_tasa_contacto_efectivo"
   ],
   "cat_cols": [
     "lag1_banca",
@@ -283,7 +293,7 @@
     ]
   },
   "params": {
-    "n_estimators": 399,
+    "n_estimators": 356,
     "max_depth": 8,
     "learning_rate": 0.0408,
     "subsample": 0.958,
@@ -298,7 +308,7 @@
   ],
   "calib_month": 202311,
   "report_month": 202312,
-  "f1_calib": 0.6864770401398059,
-  "f1_report": 0.6556275264208835,
-  "auc_report": 0.6788120585018792
+  "f1_calib": 0.6879986994865681,
+  "f1_report": 0.6566628687789386,
+  "auc_report": 0.681082812923069
 }
