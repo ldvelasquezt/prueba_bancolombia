@@ -1,0 +1,23 @@
+# --- Parte 1: ML / MLOps ---
+pandas
+numpy
+scikit-learn
+xgboost
+lightgbm
+mlflow
+pyarrow
+optuna
+matplotlib
+seaborn
+openpyxl
+
+# --- Parte 2: Sistema agéntico ---
+langgraph
+langchain
+langchain-anthropic
+pydantic
+
+# --- Utilidades / tests ---
+pytest
+pytest-cov
+python-dotenv

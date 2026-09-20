@@ -1,0 +1,39 @@
+# Datos (pesados, no se versionan; ver data/README.md para cómo obtenerlos)
+data/raw/*
+data/interim/*
+data/processed/*
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+# Las sumisiones sí se versionan (son entregable), salvo que pesen demasiado
+data/submissions/*.csv.gz
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# MLflow
+mlruns/*
+!mlruns/.gitkeep
+mlartifacts/
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
+
+# Env / secrets
+.env
+*.env.local
+configs/secrets.yaml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
