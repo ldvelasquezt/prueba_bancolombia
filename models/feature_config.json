@@ -283,7 +283,7 @@
     ]
   },
   "params": {
-    "n_estimators": 600,
+    "n_estimators": 399,
     "max_depth": 8,
     "learning_rate": 0.0408,
     "subsample": 0.958,
@@ -291,8 +291,14 @@
     "min_child_weight": 10,
     "reg_lambda": 7.12
   },
-  "threshold": 0.34,
-  "valid_month": 202312,
-  "f1_valid": 0.6758759826929329,
-  "auc_valid": 0.7258377569793282
+  "threshold": 0.32000000000000006,
+  "fit_months": [
+    202309,
+    202310
+  ],
+  "calib_month": 202311,
+  "report_month": 202312,
+  "f1_calib": 0.6864770401398059,
+  "f1_report": 0.6556275264208835,
+  "auc_report": 0.6788120585018792
 }
