@@ -85,15 +85,28 @@ class DecisionElegibilidad:
 
 
 def _meses_desde(fecha_evento: date | None, hoy: date) -> float | None:
+    """Meses transcurridos, contando fracciones de mes por días (no solo año/mes).
+    Evita que el cooldown "avance" un mes completo por estar a un día de cruzar
+    el corte de mes calendario (p. ej. aplicado el 31-ene, hoy 01-feb: son 0.03
+    meses reales, no 1)."""
     if fecha_evento is None:
         return None
-    return (hoy.year - fecha_evento.year) * 12 + (hoy.month - fecha_evento.month)
+    dias = (hoy - fecha_evento).days
+    return dias / 30.44  # promedio de días por mes
 
 
 def evaluar_elegibilidad(estado: EstadoObligacion, hoy: date | None = None) -> DecisionElegibilidad:
     hoy = hoy or date.today()
     razones: list[str] = []
 
+    # Nota de diseño: en el grafo (graph/collections_graph.py), los casos con
+    # restricción activa ya son interceptados antes por `guardrails.py`, que escala
+    # a un gestor humano sin llegar a este punto. El chequeo de abajo se mantiene
+    # aquí de todas formas como defensa en profundidad: si el guardrail cambiara o
+    # se llamara a este motor desde otro punto de entrada (otro canal, otra
+    # integración), la obligación de negocio sigue bloqueada aquí también. Por eso
+    # se prueba unitariamente de forma directa (test_eligibility.py) aunque hoy no
+    # sea alcanzable end-to-end a través del grafo completo.
     if estado.restriccion.bloquea_todo:
         razones.append("Restricción legal/operativa activa: no se puede ofrecer nada.")
         return DecisionElegibilidad([], False, razones)
@@ -110,7 +123,7 @@ def evaluar_elegibilidad(estado: EstadoObligacion, hoy: date | None = None) -> D
         if meses_desde_aplicacion is not None and meses_desde_aplicacion < cooldown:
             razones.append(
                 f"Cooldown activo: se aplicó '{estado.ultima_alternativa_aplicada.value}' hace "
-                f"{meses_desde_aplicacion} meses (mínimo {cooldown})."
+                f"{meses_desde_aplicacion:.1f} meses (mínimo {cooldown})."
             )
         else:
             opciones_elegibles = list(estado.alternativas_preaprobadas)[:MAX_OPCIONES_PREAPROBADAS_MES]
@@ -124,14 +137,15 @@ def evaluar_elegibilidad(estado: EstadoObligacion, hoy: date | None = None) -> D
         )
 
     # --- Acuerdo de pago ---
+    # Nota: esta función reporta elegibilidad "en bruto" de cada canal (opción de pago
+    # y acuerdo de pago) de forma independiente. Cuál de los dos se ofrece finalmente
+    # cuando ambos son elegibles es responsabilidad de next_best_action.decidir_accion,
+    # no de este motor — así puede comparar severidad de mora y propensión antes de
+    # elegir uno solo (ver next_best_action.py, regla 2).
     acuerdo_elegible = True
     if estado.tiene_acuerdo_vigente:
         acuerdo_elegible = False
         razones.append("Ya existe un acuerdo de pago vigente; no se ofrece uno nuevo hasta resolverlo.")
-    elif opciones_elegibles:
-        # Si el cliente ya tiene una opción de pago elegible/vigente en curso, no se
-        # ofrece acuerdo de pago en el mismo ciclo (evita mezclar dos compromisos).
-        acuerdo_elegible = not estado.tiene_acuerdo_vigente
 
     return DecisionElegibilidad(
         opciones_pago_elegibles=opciones_elegibles,

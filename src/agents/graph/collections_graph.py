@@ -29,7 +29,7 @@ from langgraph.graph import END, StateGraph
 
 from src.agents.graph.state import CollectionsState
 from src.agents.llm_client import get_llm
-from src.agents.policies.eligibility import evaluar_elegibilidad
+from src.agents.policies.eligibility import MAX_DIAS_PARA_ACUERDO, evaluar_elegibilidad
 from src.agents.policies.guardrails import datos_incompletos_o_contradictorios, evaluar_mensaje
 from src.agents.policies.next_best_action import decidir_accion
 from src.agents.tools.customer_store import CustomerStore
@@ -97,22 +97,36 @@ def build_graph(store: CustomerStore | None = None):
                 f"sin prometer nada, el motivo: {accion.justificacion}"
             )
         elif accion.tipo == "acuerdo_pago":
-            prompt = ("Ofrece al cliente un acuerdo de pago con compromiso dentro de los próximos "
-                      "5 días, de forma cordial y clara.")
+            prompt = (f"Ofrece al cliente un acuerdo de pago con compromiso dentro de los próximos "
+                      f"{MAX_DIAS_PARA_ACUERDO} días, de forma cordial y clara.")
         else:
             prompt = (f"Explica al cliente, de forma clara, por qué la alternativa "
                       f"'{accion.alternativa.value}' es la más adecuada para su obligación en mora.")
 
-        respuesta = llm.invoke([
-            {"role": "system", "content": "Eres un asistente de cobranza de Bancolombia. Sé empático, "
-                                            "claro y NUNCA ofrezcas nada que no esté explícitamente "
-                                            "autorizado en la instrucción."},
-            {"role": "user", "content": prompt},
-        ])
-        return {
-            "respuesta_agente": respuesta.content,
-            "trace": _trace(state, "respond", "Respuesta generada"),
-        }
+        try:
+            respuesta = llm.invoke([
+                {"role": "system", "content": "Eres un asistente de cobranza de Bancolombia. Sé empático, "
+                                                "claro y NUNCA ofrezcas nada que no esté explícitamente "
+                                                "autorizado en la instrucción."},
+                {"role": "user", "content": prompt},
+            ])
+            contenido = respuesta.content
+            if not isinstance(contenido, str):
+                contenido = str(contenido)
+            return {
+                "respuesta_agente": contenido,
+                "trace": _trace(state, "respond", "Respuesta generada"),
+            }
+        except Exception as exc:  # el LLM (timeout, rate-limit, API caída) no debe romper el flujo
+            return {
+                "respuesta_agente": (
+                    "Tuvimos un inconveniente técnico generando la respuesta. Un gestor humano "
+                    "se pondrá en contacto contigo para continuar."
+                ),
+                "requiere_escalamiento": True,
+                "razon_escalamiento": f"Fallo del LLM en el nodo respond: {exc}",
+                "trace": _trace(state, "respond", f"LLM falló, se degrada a escalamiento: {exc}"),
+            }
 
     def node_escalate(state: CollectionsState) -> dict:
         return {

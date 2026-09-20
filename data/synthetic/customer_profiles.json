@@ -31,7 +31,7 @@
     "dias_mora": 40,
     "alternativas_preaprobadas": ["ampliacion_plazo"],
     "ultima_alternativa_aplicada": "ampliacion_plazo",
-    "fecha_ultima_alternativa_aplicada": "2026-08-15",
+    "fecha_ultima_alternativa_aplicada": "hace_36_dias",
     "tiene_acuerdo_vigente": false,
     "acuerdo_incumplido_reciente": false,
     "restriccion": {},

@@ -9,12 +9,27 @@ identificados como no reales.
 from __future__ import annotations
 
 import json
-from datetime import date
+import re
+from datetime import date, timedelta
 from pathlib import Path
 
 from src.agents.policies.eligibility import EstadoObligacion, RestriccionCliente, TipoAlternativa
 
 DEFAULT_PATH = Path(__file__).resolve().parents[3] / "data" / "synthetic" / "customer_profiles.json"
+
+_RELATIVE_DATE_RE = re.compile(r"^hace_(\d+)_dias$")
+
+
+def _parse_fecha(valor: str | None) -> date | None:
+    """Acepta una fecha ISO absoluta o el marcador relativo 'hace_N_dias', para que
+    los escenarios sintéticos (p. ej. cooldown activo) no se rompan con el paso del
+    tiempo real si se usara una fecha absoluta fija."""
+    if not valor:
+        return None
+    m = _RELATIVE_DATE_RE.match(valor)
+    if m:
+        return date.today() - timedelta(days=int(m.group(1)))
+    return date.fromisoformat(valor)
 
 
 class CustomerStore:
@@ -39,7 +54,7 @@ class CustomerStore:
                 TipoAlternativa(p["ultima_alternativa_aplicada"])
                 if p.get("ultima_alternativa_aplicada") else None
             ),
-            fecha_ultima_alternativa_aplicada=date.fromisoformat(fecha_alt) if fecha_alt else None,
+            fecha_ultima_alternativa_aplicada=_parse_fecha(fecha_alt),
             tiene_acuerdo_vigente=p.get("tiene_acuerdo_vigente", False),
             acuerdo_incumplido_reciente=p.get("acuerdo_incumplido_reciente", False),
             restriccion=restriccion,

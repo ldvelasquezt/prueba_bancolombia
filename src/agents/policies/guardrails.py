@@ -13,29 +13,56 @@ Cubre los escenarios de la prueba relacionados con seguridad y escalamiento:
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 
+# Patrones sobre texto ya normalizado (ver `_normalizar`): minúsculas, sin tildes,
+# espacios colapsados. Por eso aquí se escribe "condonacion" y no "condonación": la
+# tilde ya se eliminó antes de comparar, así que escribirla en el patrón nunca
+# matchearía. Se cubren variantes en español e inglés (jailbreaks suelen probar
+# ambos idiomas).
 PATRONES_MANIPULACION = [
     r"ignora( tus)? instrucciones",
-    r"ignora las reglas",
-    r"act[uú]a como",
+    r"ignora (las reglas|todo lo anterior)",
+    r"haz caso omiso",
+    r"actua como",
     r"eres (ahora )?(un|una) ",
-    r"olvida (todo|lo anterior)",
+    r"olvida (todo|lo anterior|las reglas|tus reglas)",
     r"sin restricciones",
-    r"descuento (especial|no autorizado|por fuera)",
-    r"condona(r|ción)? (toda|la) deuda",
+    r"descuento (especial|no autorizado|por fuera|del \d)",
+    r"(condon|perdon|elimin|quit)\w*.*deuda",
     r"borra (mi|el) (historial|registro)",
+    r"elimina (mi|el) (historial|registro)",
     r"dame acceso a",
+    # Inglés: los intentos de jailbreak con frecuencia cambian de idioma para evadir
+    # filtros solo-español.
+    r"ignore (your |the |all )?(previous |prior )?instructions",
+    r"disregard (your |the |all )?(previous |prior )?(instructions|rules)",
+    r"act as (a|an) ",
+    r"no restrictions",
+    r"unauthorized discount",
+    r"forgive (the|my|all) debt",
+    r"you are now",
 ]
 
 PATRONES_SENSIBLES = [
-    r"demanda|abogado|tutela|denuncia",
-    r"fraude|robo|hackeo|suplantaci[oó]n",
-    r"fallec|muri[oó]|muerte",
-    r"enfermedad (grave|terminal)|c[aá]ncer|hospitalizado",
-    r"suicid|autolesi",
-    r"queja formal|superintendencia",
+    r"demanda|abogado|tutela|denuncia|lawsuit|lawyer",
+    r"fraude|robo|hackeo|suplantacion|fraud|hacked|identity theft",
+    r"fallec|murio|muerte|death|deceased|died",
+    r"enfermedad (grave|terminal)|cancer|hospitalizado|terminal illness|hospitalized",
+    r"suicid|autolesi|self[- ]harm",
+    r"queja formal|superintendencia|defensoria del consumidor|formal complaint|regulator",
 ]
+
+
+def _normalizar(texto: str) -> str:
+    """minúsculas + sin tildes/diacríticos + espacios colapsados, para que el
+    parafraseo trivial (acentos, mayúsculas, espacios extra) no evada los patrones."""
+    texto = texto.lower().strip()
+    texto = unicodedata.normalize("NFKD", texto)
+    texto = "".join(c for c in texto if not unicodedata.combining(c))
+    texto = re.sub(r"\s+", " ", texto)
+    return texto
 
 
 @dataclass
@@ -48,7 +75,7 @@ class ResultadoGuardrail:
 def evaluar_mensaje(mensaje: str | None) -> ResultadoGuardrail:
     if not mensaje:
         return ResultadoGuardrail(False, False, None)
-    texto = mensaje.lower()
+    texto = _normalizar(mensaje)
 
     for pat in PATRONES_MANIPULACION:
         if re.search(pat, texto):

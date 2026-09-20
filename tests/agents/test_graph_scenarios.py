@@ -91,3 +91,21 @@ def test_trace_registra_todos_los_pasos(app):
     assert "fetch_state" in nodos
     assert "guardrails" in nodos
     assert len(nodos) >= 3  # trazabilidad mínima end-to-end
+
+
+def test_fallo_del_llm_degrada_a_escalamiento_no_crashea(monkeypatch):
+    """Si el LLM real falla (timeout, rate-limit, API caída), el grafo no debe
+    propagar la excepción: debe degradar a escalamiento con una respuesta genérica."""
+    import src.agents.graph.collections_graph as graph_module
+
+    class LLMQueFalla:
+        def invoke(self, messages):
+            raise RuntimeError("timeout simulado")
+
+    monkeypatch.setattr(graph_module, "get_llm", lambda: LLMQueFalla())
+    app_con_fallo = graph_module.build_graph(CustomerStore())
+
+    result = run(app_con_fallo, "OB-001")  # caso que normalmente llega a `respond`
+    assert result["requiere_escalamiento"] is True
+    assert result["respuesta_agente"]  # sigue devolviendo algo, nunca crashea
+    assert any(t["nodo"] == "respond" for t in result["trace"])

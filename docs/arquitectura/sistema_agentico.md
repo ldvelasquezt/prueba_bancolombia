@@ -44,18 +44,27 @@ fetch_state -> guardrails -> [escalate_human | eligibility] -> propension
   fraude, salud grave) y (c) datos incompletos o restricciones legales activas.
   Si algo dispara, se va directo a `escalate_human` sin pasar por reglas de
   negocio ni LLM.
-- **eligibility**: aplica las reglas mínimas del negocio (máx. 3 opciones
-  preaprobadas/mes, cooldown de 3-4 meses tras aplicar una opción, acuerdo de
-  pago no ofrecible si ya hay uno vigente, mora excesiva o restricción legal
-  bloquea todo).
+- **eligibility**: aplica las reglas mínimas del negocio (tope de opciones
+  preaprobadas por obligación, cooldown de 3-4 meses tras aplicar una opción,
+  acuerdo de pago no ofrecible si ya hay uno vigente, mora excesiva o
+  restricción legal bloquea todo). Los chequeos de mora excesiva/restricción
+  legal quedan también como defensa en profundidad: hoy `guardrails` ya
+  intercepta esos casos antes de llegar aquí, pero `eligibility` los bloquea
+  igual por si se invoca desde otro punto de entrada o el guardrail cambia.
+  `eligibility` reporta la elegibilidad "en bruto" de cada canal (opción de
+  pago y acuerdo de pago) de forma independiente; cuál de los dos ofrecer
+  cuando ambos son elegibles lo decide `decide_action`, no este nodo.
 - **propension**: consulta el score de propensión (en producción, el modelo de
   la Parte 1 vía un endpoint de inferencia).
 - **decide_action**: selecciona la siguiente mejor acción combinando
   elegibilidad + propensión + severidad de mora (reglas explícitas y
   auditables, ver `next_best_action.py`).
 - **respond**: el único nodo que usa el LLM, y solo para **redactar** —nunca
-  para decidir— restringido a comunicar exclusivamente lo que `decide_action`
-  autorizó.
+  para decidir. Se le instruye por system prompt que comunique exclusivamente
+  lo que `decide_action` autorizó, pero esto es hoy una instrucción de prompt,
+  no una verificación programática posterior sobre el texto generado (ver
+  limitación explícita en la sección 7 — falta un chequeo de post-generación
+  antes de producción con un LLM real).
 - **escalate_human**: nodo terminal para los casos que no debe resolver el
   sistema automáticamente.
 
@@ -74,9 +83,11 @@ confunda con el modelo real.
 - **Trazabilidad**: cada nodo agrega un evento a `state["trace"]` (nodo +
   detalle de la decisión). En producción esto se persistiría como log de
   auditoría inmutable (ver sección 7).
-- **Reglas de negocio fuera del LLM**: elegibilidad y priorización son código
-  determinístico, testeado unitariamente (`tests/agents/test_eligibility.py`).
-  El LLM nunca decide QUÉ ofrecer, solo CÓMO comunicarlo.
+- **Reglas de negocio fuera del LLM**: elegibilidad (`test_eligibility.py`) y
+  priorización (`test_next_best_action.py`) son código determinístico,
+  testeado unitariamente. El LLM nunca decide QUÉ ofrecer, solo CÓMO
+  comunicarlo — aunque, como se aclara en la sección de nodos, el "solo cómo"
+  hoy se garantiza por instrucción de prompt, no por verificación posterior.
 - **Guardrails previos al LLM**: la detección de manipulación/contenido
   sensible no depende del LLM (sería circular: un intento de manipulación
   podría intentar manipular también al clasificador). Se implementa con reglas
@@ -89,8 +100,9 @@ confunda con el modelo real.
 
 | Tipo | Archivo | Qué cubre |
 |---|---|---|
-| Unitarias (reglas de negocio) | `test_eligibility.py` | Cooldown, máx. 3 opciones, restricciones legales, acuerdo vigente, mora excesiva |
-| Seguridad | `test_guardrails.py` | Prompt injection, contenido sensible, datos incompletos |
+| Unitarias (elegibilidad) | `test_eligibility.py` | Cooldown, tope de opciones preaprobadas, restricciones legales, acuerdo vigente, mora excesiva |
+| Unitarias (priorización) | `test_next_best_action.py` | Mora temprana + propensión, incumplimiento reciente bloqueando acuerdo, priorización por severidad de mora |
+| Seguridad | `test_guardrails.py` | Prompt injection (incl. evasión por acentos/mayúsculas/espacios/inglés), contenido sensible, datos incompletos |
 | Integración end-to-end | `test_graph_scenarios.py` | Los 7+ escenarios del enunciado corridos sobre el grafo completo |
 
 Los tests de integración corren con `MockLLM` (sin necesitar `ANTHROPIC_API_KEY`),
@@ -112,6 +124,16 @@ esta prueba.
     conocidos) como gate de CI antes de cada release.
   - Human-in-the-loop: muestreo de conversaciones para revisión humana
     periódica, con feedback loop hacia el guardrail y el prompt.
+  - **Verificación post-generación**: antes de enviar al cliente el texto que
+    devuelve un LLM real, correr un chequeo programático (no otro LLM) que
+    confirme que la respuesta solo menciona la alternativa/plazo autorizados
+    por `decide_action` y ningún monto, descuento o promesa fuera de ese
+    contrato. Hoy esto solo se pide por prompt (ver nodo `respond`); es la
+    brecha más importante a cerrar antes de usar un LLM real en producción.
+  - Manejo explícito de fallos del LLM (timeout, rate-limit, API caída): la
+    llamada al LLM debe envolverse en un bloque de manejo de errores que
+    escale a un gestor humano en vez de propagar la excepción, con reintentos
+    acotados y circuit breaker.
 - **Monitoreo en producción**:
   - Tasa de escalamiento a humano por motivo (alerta si sube abruptamente:
     puede indicar guardrail roto o cambio en el comportamiento de clientes).

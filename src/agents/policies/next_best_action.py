@@ -18,7 +18,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.agents.policies.eligibility import DecisionElegibilidad, EstadoObligacion, TipoAlternativa
+from src.agents.policies.eligibility import (
+    MAX_DIAS_PARA_ACUERDO, DecisionElegibilidad, EstadoObligacion, TipoAlternativa,
+)
 
 MORA_TEMPRANA_DIAS = 30
 PROPENSION_ALTA = 0.6
@@ -54,7 +56,8 @@ def decidir_accion(estado: EstadoObligacion, decision: DecisionElegibilidad,
         return AccionRecomendada(
             "acuerdo_pago", None,
             f"Mora temprana ({estado.dias_mora} días) y propensión alta ({propension:.2f}): "
-            f"se prioriza un acuerdo de pago a máx. 5 días sobre una opción de pago formal."
+            f"se prioriza un acuerdo de pago a máx. {MAX_DIAS_PARA_ACUERDO} días sobre una "
+            f"opción de pago formal."
         )
 
     if decision.opciones_pago_elegibles:
@@ -68,11 +71,16 @@ def decidir_accion(estado: EstadoObligacion, decision: DecisionElegibilidad,
             f"y propensión ({propension:.2f})."
         )
 
-    if decision.acuerdo_pago_elegible:
+    if decision.acuerdo_pago_elegible and not estado.acuerdo_incumplido_reciente:
         return AccionRecomendada(
             "acuerdo_pago", None,
             "No hay opciones de pago elegibles en este momento; se ofrece un acuerdo de pago "
             "como alternativa de gestión temprana."
         )
 
-    return AccionRecomendada("sin_oferta", None, "; ".join(decision.razones_bloqueo))
+    motivo = "; ".join(decision.razones_bloqueo)
+    if estado.acuerdo_incumplido_reciente:
+        motivo = (motivo + "; " if motivo else "") + (
+            "Se descarta el acuerdo de pago porque el cliente incumplió uno recientemente."
+        )
+    return AccionRecomendada("sin_oferta", None, motivo or "Sin alternativas ni acuerdos elegibles.")
