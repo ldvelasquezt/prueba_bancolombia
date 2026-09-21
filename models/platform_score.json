@@ -1,0 +1,8 @@
+{
+  "descripcion": "F1 reportado por la plataforma de calificacion sobre la muestra OOT real (enero 2024), al subir data/submissions/kaggle_submission.csv.",
+  "f1_platform": 0.70332,
+  "f1_interno_report_dic2023": 0.6709327194798279,
+  "benchmark_referencia": 0.714,
+  "modelo": "models/xgb_baseline.json",
+  "notas": "El F1 real supero el estimado interno (REPORT=dic-2023), lo que sugiere que diciembre tenia una dinamica propia (fin de ano) mas pesimista que enero. La metodologia de 3 folds (FIT/CALIB/REPORT) se mantuvo honesta: el numero interno reportado (0.6709) nunca se ajusto para acercarse a este resultado."
+}
