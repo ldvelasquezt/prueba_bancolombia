@@ -32,6 +32,16 @@ class TipoAlternativa(str, Enum):
     REESTRUCTURACION = "reestructuracion"
 
 
+# Alternativas que, bajo la Circular Básica Contable y Financiera de la
+# Superintendencia Financiera de Colombia, constituyen una "reestructuración" en
+# sentido regulatorio: implican reclasificación de la calificación de riesgo de la
+# obligación y su provisión asociada, no solo un cambio operativo de plazo/cuota.
+# Este motor NO decide la reclasificación contable (eso requiere el criterio de
+# Riesgo/Contabilidad y datos que no están disponibles aquí); solo señala la
+# alternativa para que el flujo de aprobación correspondiente se active aguas
+# abajo. Tratarla como "una alternativa más" sería un hueco de cumplimiento.
+ALTERNATIVAS_CON_IMPACTO_CONTABLE = {TipoAlternativa.REESTRUCTURACION}
+
 # Meses de cooldown por tipo de alternativa tras haber sido aplicada
 COOLDOWN_MESES = {
     TipoAlternativa.AMPLIACION_PLAZO: 3,
@@ -82,6 +92,14 @@ class DecisionElegibilidad:
     @property
     def tiene_alguna_oferta(self) -> bool:
         return bool(self.opciones_pago_elegibles) or self.acuerdo_pago_elegible
+
+    @property
+    def requiere_flujo_contable(self) -> bool:
+        """True si alguna opción elegible tiene impacto en calificación de riesgo/
+        provisión (ver ALTERNATIVAS_CON_IMPACTO_CONTABLE) y por tanto debe pasar por
+        el flujo de aprobación de Riesgo/Contabilidad antes de aplicarse, no solo por
+        la aprobación operativa de cobranza."""
+        return any(a in ALTERNATIVAS_CON_IMPACTO_CONTABLE for a in self.opciones_pago_elegibles)
 
 
 def _meses_desde(fecha_evento: date | None, hoy: date) -> float | None:

@@ -143,8 +143,19 @@ esta prueba.
     breakers y fallback a "escalar a humano" si un servicio no responde.
 - **Seguridad de la información**: enmascaramiento/tokenización de datos
   sensibles antes de que lleguen al LLM, control de acceso por rol a las trazas
-  de auditoría, retención de datos conforme a políticas de protección de datos
-  personales.
+  de auditoría, y retención/tratamiento de datos conforme a la **Ley 1266 de
+  2008 (Habeas Data financiero)** — el CRM simulado de este prototipo no
+  implementa esto; en producción, ningún dato personal debería llegar al LLM
+  sin pasar antes por una capa de anonimización/tokenización auditada.
+- **Cumplimiento contable/regulatorio**: `policies/eligibility.py` marca con
+  `requiere_flujo_contable` las alternativas (hoy solo `REESTRUCTURACION`) que
+  bajo la **Circular Básica Contable y Financiera de la Superintendencia
+  Financiera** implican reclasificación de la calificación de riesgo y de la
+  provisión de la obligación, no solo un cambio operativo de plazo/cuota. El
+  motor NO decide esa reclasificación (requiere criterio de Riesgo/Contabilidad
+  y datos que este prototipo no tiene); solo la señala para que el flujo de
+  aprobación correspondiente se active aguas abajo, y nunca la aplica
+  automáticamente vía el LLM.
 - **Gobierno de cambios**: todo cambio a `policies/eligibility.py` (reglas de
   negocio) requiere aprobación de riesgo/cumplimiento, con control de versión y
   changelog auditable, separado del ciclo de despliegue del LLM/prompt.

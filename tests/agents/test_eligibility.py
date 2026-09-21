@@ -68,6 +68,24 @@ def test_acuerdo_vigente_no_ofrece_otro():
     assert decision.acuerdo_pago_elegible is False
 
 
+def test_reestructuracion_marca_flujo_contable():
+    estado = EstadoObligacion(
+        obligacion_id="X8", dias_mora=200,
+        alternativas_preaprobadas=[TipoAlternativa.REESTRUCTURACION],
+    )
+    decision = evaluar_elegibilidad(estado, hoy=date(2024, 2, 1))
+    assert decision.requiere_flujo_contable is True
+
+
+def test_ampliacion_plazo_no_marca_flujo_contable():
+    estado = EstadoObligacion(
+        obligacion_id="X9", dias_mora=30,
+        alternativas_preaprobadas=[TipoAlternativa.AMPLIACION_PLAZO],
+    )
+    decision = evaluar_elegibilidad(estado, hoy=date(2024, 2, 1))
+    assert decision.requiere_flujo_contable is False
+
+
 def test_mora_excesiva_bloquea_gestion():
     estado = EstadoObligacion(
         obligacion_id="X7", dias_mora=400,

@@ -68,11 +68,13 @@ def build_graph(store: CustomerStore | None = None):
     def node_eligibility(state: CollectionsState) -> dict:
         estado = state["estado_obligacion"]
         decision = evaluar_elegibilidad(estado)
+        detalle = (f"Elegibles: opciones={[a.value for a in decision.opciones_pago_elegibles]}, "
+                   f"acuerdo={decision.acuerdo_pago_elegible}")
+        if decision.requiere_flujo_contable:
+            detalle += " | requiere flujo de aprobación Riesgo/Contabilidad (impacto en calificación/provisión)"
         return {
             "decision_elegibilidad": decision,
-            "trace": _trace(state, "eligibility",
-                             f"Elegibles: opciones={[a.value for a in decision.opciones_pago_elegibles]}, "
-                             f"acuerdo={decision.acuerdo_pago_elegible}"),
+            "trace": _trace(state, "eligibility", detalle),
         }
 
     def node_propension(state: CollectionsState) -> dict:
