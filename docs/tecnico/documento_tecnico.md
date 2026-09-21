@@ -8,7 +8,7 @@ Validación en 3 folds (no 2): FIT (sep–oct) ajusta; CALIB (nov) calibra umbra
 
 Con contexto de negocio colombiano se agregó lag de gestión/promesas anterior (PTP kept rate, contacto) y el **desenlace de la alternativa previa** más el lag del target (y_{t-1}, válido: describe M-1 ya cerrado) — este último explica el 31% de la importancia, sobre cualquier otra variable.
 
-Resultado final: F1=0.6709, AUC=0.7225 (XGBoost). Optuna no superó los defaults. LightGBM, CatBoost y sus ensambles convergen a F1 0.667–0.671, con la misma caída CALIB→REPORT (~0.03) sin importar el algoritmo — el techo es de información, no de modelo.
+F1 interno (REPORT=dic-2023): 0.6709, AUC=0.7225 (XGBoost). Optuna no superó los defaults; LightGBM, CatBoost y ensambles convergen a 0.667–0.671 — diciembre parecía tener una dinámica propia. **Confirmado en plataforma**: sobre el OOT real (ene-2024), **F1=0.7033** — por encima del techo interno, a ~1 punto del benchmark (0.714).
 
 ## 2. Parte 2 — Multiagente
 
@@ -28,14 +28,14 @@ Revisión adversarial: fallback de acuerdo tras incumplimiento por cooldown, exc
 ## 4. Riesgos
 
 - Verificación post-generación del LLM en `respond` es hoy solo instrucción de prompt, no chequeo programático.
-- F1_report proviene de un mes (diciembre); sensible a estacionalidad de fin de año.
+- F1_report interno (0.6709) subestimó el real de plataforma (0.7033) — diciembre parece atípico; queda como hipótesis, no causa confirmada.
 - Dependencia de `prob_*` sin monitoreo de drift.
 - **Propensión vs. uplift**: solo se observa aceptación en clientes ya contactados por la política pasada — el modelo aprende esa política, no al cliente. Parte habría pagado igual (self-cure); usar el score sin champion-challenger puede destruir valor.
 - **Regulatorio**: `REESTRUCTURACION` implica reclasificación de riesgo/provisión (Circular Básica); el motor la marca (`requiere_flujo_contable`) sin decidirla — es de Riesgo/Contabilidad. Falta tratamiento de datos bajo Ley 1266.
 
 ## 5. Conclusiones
 
-El pipeline evita fuga verificable y reporta una métrica honesta (F1=0.6709; 0.667–0.671 probando también LightGBM, CatBoost y ensambles) tras separar calibración de reporte. La variable más predictiva es el desenlace de la gestión anterior, no el perfil del cliente. Que ni más features, ni tuning, ni cambiar de algoritmo movieran la métrica sugiere un techo de información (transaccional, buró externo, contactabilidad), no de modelo. Queda ~4-5 puntos bajo el benchmark (0.714) — brecha reconocida, no oculta. El agéntico mantiene decisiones de negocio en código determinístico y auditable, usa el LLM solo para redactar, con degradación segura. La revisión adversarial encontró y corrigió bugs reales.
+El pipeline evita fuga verificable y reporta F1 interno honesto (0.6709) tras separar calibración de reporte; la plataforma confirmó F1=0.7033 sobre el OOT real (ene-2024) — la disciplina metodológica no costó desempeño real. La variable más predictiva es el desenlace de la gestión anterior, no el perfil del cliente. El agéntico mantiene decisiones de negocio en código determinístico y auditable, usa el LLM solo para redactar, con degradación segura. La revisión adversarial encontró y corrigió bugs reales.
 
 ---
 
