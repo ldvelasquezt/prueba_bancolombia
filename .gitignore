@@ -40,3 +40,6 @@ Thumbs.db
 
 # Config local de Claude Code (no forma parte del entregable)
 .claude/
+
+# Logs de entrenamiento de CatBoost
+catboost_info/

@@ -140,16 +140,25 @@ def load_hist_with_rolling(path: str, date_col: str, date_is_yyyymmdd: bool,
     # Nota de rendimiento: groupby().transform(lambda ...) es extremadamente lento en
     # tablas de varios millones de filas (invoca la lambda por cada grupo). Se usa en su
     # lugar groupby().rolling()/.shift() vectorizados en C, ~100x más rápido aquí.
+    #
+    # Las tablas históricas (prob, cuotas) cubren ene-dic 2023 completo -- 12 meses, no
+    # solo el rango de trtest (ago-dic). Se usa una ventana de 6 meses (no 3) para
+    # capturar más tendencia real, más una desviación estándar como señal de volatilidad
+    # de pago/riesgo reciente.
     g = hist.groupby(ID_COLS_SHORT, sort=False)
     n_id_levels = len(ID_COLS_SHORT)
     for c in value_cols:
-        roll = g[c].rolling(3, min_periods=1).mean()
-        hist[f"{prefix}_{c}_roll3m"] = roll.droplevel(list(range(n_id_levels))).reindex(hist.index)
-        hist[f"{prefix}_{c}_trend2m"] = hist[c] - g[c].shift(2)
+        roll_mean = g[c].rolling(6, min_periods=1).mean()
+        hist[f"{prefix}_{c}_roll6m"] = roll_mean.droplevel(list(range(n_id_levels))).reindex(hist.index)
+        roll_std = g[c].rolling(6, min_periods=2).std()
+        hist[f"{prefix}_{c}_vol6m"] = roll_std.droplevel(list(range(n_id_levels))).reindex(hist.index)
+        hist[f"{prefix}_{c}_trend5m"] = hist[c] - g[c].shift(5)
 
     hist = hist.rename(columns={**exact_rename, **passthrough_rename})
     keep = ID_COLS_SHORT + ["mes_prev"] + list(exact_rename.values()) + list(passthrough_rename.values())
-    keep += [f"{prefix}_{c}_roll3m" for c in value_cols] + [f"{prefix}_{c}_trend2m" for c in value_cols]
+    keep += [f"{prefix}_{c}_roll6m" for c in value_cols]
+    keep += [f"{prefix}_{c}_vol6m" for c in value_cols]
+    keep += [f"{prefix}_{c}_trend5m" for c in value_cols]
     return hist[keep]
 
 
@@ -237,7 +246,7 @@ def enrich(df: pd.DataFrame, lag_struct: pd.DataFrame, lag2: pd.DataFrame,
     # "Shock" de pago reciente como razón (no diferencia) contra el promedio de 3
     # meses: detecta mejor una caída relativa cuando la base de pago ya era baja.
     df["prevmes_shock_pago"] = (
-        df["prevmes_porc_pago"] / df["cuotas_porc_pago_roll3m"].replace(0, pd.NA)
+        df["prevmes_porc_pago"] / df["cuotas_porc_pago_roll6m"].replace(0, pd.NA)
     )
 
     # Concentración de la deuda con el banco dentro del endeudamiento total del
