@@ -9,44 +9,49 @@ gestión proactiva/reactiva de clientes en mora.
 ```
 data/                  Datos (raw/ no versionado; ver data/README.md)
   raw/                 Archivos entregados por el banco
-  interim/             Datos intermedios de limpieza/unión
-  processed/           Datasets de train/valid/test/oot listos para modelar
-  submissions/         resultado_prueba.csv y sumisiones históricas (entregable)
+  processed/           Datasets de train/oot listos para modelar (no versionado)
+  submissions/         resultado_prueba.csv (entregable), kaggle_submission.csv
+  synthetic/           Perfiles sintéticos para el prototipo agéntico
 
-notebooks/             Exploración y análisis (EDA, prototipos rápidos)
+notebooks/             EDA ligero
+
+models/                Modelo entrenado (xgb_baseline.json), feature_config.json,
+                       comparación de modelos (ensemble_comparison.json)
 
 src/
   ml/                  Parte 1 — pipeline de Machine Learning
-    data/              Carga, limpieza, joins de las fuentes crudas
-    features/          Ingeniería de variables
-    training/          Entrenamiento, validación, tracking (MLflow)
-    inference/         Scoring / generación de resultado_prueba.csv
-    monitoring/         Drift de datos/modelo, métricas en producción
+    data/              build_dataset.py: features sin fuga, joins de fuentes crudas
+    training/          train_baseline.py (XGBoost), train_ensemble.py (comparación
+                       contra LightGBM/CatBoost)
+    inference/         predict.py (resultado_prueba.csv), build_kaggle_submission.py
   agents/              Parte 2 — sistema agéntico
-    graph/             Definición del grafo de agentes (LangGraph)
-    tools/             Herramientas (consulta elegibilidad, políticas, CRM simulado)
-    policies/          Reglas de negocio de elegibilidad y escalamiento
+    graph/             Grafo de agentes (LangGraph)
+    tools/             CRM simulado, wrapper de propensión
+    policies/          Reglas de elegibilidad, priorización (NBA) y guardrails
 
 tests/
-  ml/                  Pruebas del pipeline analítico
-  agents/              Pruebas funcionales/integración/seguridad/robustez de agentes
+  agents/              41 pruebas: reglas de negocio, seguridad, integración end-to-end
+  ml/                  Pendiente (ver docs/tecnico/ — riesgo declarado, no oculto)
 
 docs/
-  tecnico/             Documento técnico (máx. 4000 caracteres)
-  arquitectura/        Diagramas y propuesta de arquitectura de producción
-  presentacion/        Material de apoyo para la sustentación ejecutiva
+  tecnico/             Documento técnico (máx. 4000 caracteres + anexos)
+  arquitectura/        mlops_produccion.md (Parte 1) y sistema_agentico.md (Parte 2)
 
-configs/               Configuración (hiperparámetros, umbrales, rutas) — sin secretos
-mlruns/                Tracking local de MLflow (no versionado)
+requirements.txt       Dependencias (Python 3.12 + venv)
 ```
 
 ## Entregables mapeados a este repo
 
-1. **Documento técnico** → `docs/tecnico/`
-2. **Presentación ejecutiva** → `docs/presentacion/` (material de apoyo; no se entrega el .pptx)
-3. **Archivo de resultados** (`resultado_prueba.csv`) → `data/submissions/`
+1. **Documento técnico** → `docs/tecnico/documento_tecnico.md`
+2. **Presentación ejecutiva** → Artifact separado (deck de 16 diapositivas, 15 min);
+   no se entrega el .pptx, se usa en la sustentación
+3. **Archivo de resultados** → `data/submissions/resultado_prueba.csv` (ID, var_rpta_alt,
+   Prob_uno); `data/submissions/kaggle_submission.csv` es el mismo resultado en el
+   formato exacto de `sample_submission.csv` (solo ID, var_rpta_alt) para subir a la
+   plataforma de calificación
 4. **Código y repositorio** → todo este repo
-5. **Arquitectura y operación en producción** → `docs/arquitectura/`
+5. **Arquitectura y operación en producción** → `docs/arquitectura/` (dos documentos:
+   uno por cada parte de la prueba)
 
 ## Quickstart
 
