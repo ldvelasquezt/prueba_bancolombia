@@ -1,16 +1,8 @@
 # Arquitectura del sistema agéntico de cobranza
 
-## 1. Decisión de diseño: un grafo, no "agentes autónomos" negociando entre sí
+## 1. Por qué diseñé un grafo, no "agentes autónomos" negociando entre sí
 
-Se optó por **un solo grafo de decisión (LangGraph) con nodos especializados**,
-en vez de varios agentes conversacionales independientes que se coordinen entre
-sí. Razón: la tarea es un **pipeline de decisión con distintos tipos de
-responsabilidad** (seguridad, cumplimiento normativo, scoring analítico,
-priorización de negocio, redacción de respuesta), no un problema de
-negociación abierta. Modelarlo como agentes autónomos habría añadido
-complejidad de coordinación sin beneficio real, y —más importante— habría
-puesto reglas de cumplimiento normativo bajo el "criterio" de un LLM, que es
-exactamente lo que se quiere evitar.
+Decidí construir **un solo grafo de decisión (LangGraph) con nodos especializados**, en vez de varios agentes conversacionales independientes coordinándose entre sí. Mi razón: esta tarea es un **pipeline de decisión con responsabilidades distintas** (seguridad, cumplimiento normativo, scoring analítico, priorización de negocio, redacción de respuesta), no un problema de negociación abierta entre partes. Modelarlo como agentes autónomos me habría añadido complejidad de coordinación sin ningún beneficio real, y —lo más importante— habría dejado reglas de cumplimiento normativo bajo el "criterio" de un LLM, que es exactamente lo que quería evitar desde el diseño.
 
 ## 2. Componentes (`src/agents/`)
 
@@ -37,64 +29,24 @@ fetch_state -> guardrails -> [escalate_human | eligibility] -> propension
             -> decide_action -> respond
 ```
 
-- **fetch_state**: obtiene el perfil cliente-obligación (en producción: CRM +
-  core bancario).
-- **guardrails**: corre ANTES de cualquier llamado al LLM. Detecta (a) intentos
-  de manipulación/prompt injection, (b) contenido sensible (amenazas legales,
-  fraude, salud grave) y (c) datos incompletos o restricciones legales activas.
-  Si algo dispara, se va directo a `escalate_human` sin pasar por reglas de
-  negocio ni LLM.
-- **eligibility**: aplica las reglas mínimas del negocio (tope de opciones
-  preaprobadas por obligación, cooldown de 3-4 meses tras aplicar una opción,
-  acuerdo de pago no ofrecible si ya hay uno vigente, mora excesiva o
-  restricción legal bloquea todo). Los chequeos de mora excesiva/restricción
-  legal quedan también como defensa en profundidad: hoy `guardrails` ya
-  intercepta esos casos antes de llegar aquí, pero `eligibility` los bloquea
-  igual por si se invoca desde otro punto de entrada o el guardrail cambia.
-  `eligibility` reporta la elegibilidad "en bruto" de cada canal (opción de
-  pago y acuerdo de pago) de forma independiente; cuál de los dos ofrecer
-  cuando ambos son elegibles lo decide `decide_action`, no este nodo.
-- **propension**: consulta el score de propensión (en producción, el modelo de
-  la Parte 1 vía un endpoint de inferencia).
-- **decide_action**: selecciona la siguiente mejor acción combinando
-  elegibilidad + propensión + severidad de mora (reglas explícitas y
-  auditables, ver `next_best_action.py`).
-- **respond**: el único nodo que usa el LLM, y solo para **redactar** —nunca
-  para decidir. Se le instruye por system prompt que comunique exclusivamente
-  lo que `decide_action` autorizó, pero esto es hoy una instrucción de prompt,
-  no una verificación programática posterior sobre el texto generado (ver
-  limitación explícita en la sección 7 — falta un chequeo de post-generación
-  antes de producción con un LLM real).
-- **escalate_human**: nodo terminal para los casos que no debe resolver el
-  sistema automáticamente.
+- **fetch_state**: obtiene el perfil cliente-obligación (en producción: CRM + core bancario).
+- **guardrails**: corre ANTES de cualquier llamado al LLM. Detecta intentos de manipulación/prompt injection, contenido sensible, y datos incompletos o restricciones legales activas. Si algo dispara, va directo a `escalate_human` sin pasar por reglas de negocio ni por el LLM — así lo diseñé a propósito.
+- **eligibility**: aplica las reglas mínimas del negocio (tope de opciones preaprobadas, cooldown de 3-4 meses tras aplicar una opción, acuerdo no ofrecible si ya hay uno vigente, mora excesiva o restricción legal bloquea todo). Dejé los chequeos de mora excesiva y restricción legal también aquí como defensa en profundidad: hoy `guardrails` ya intercepta esos casos antes, pero quise que `eligibility` los bloqueara igual por si algún día se invoca desde otro punto de entrada o el guardrail cambia. `eligibility` reporta la elegibilidad "en bruto" de cada canal por separado; cuál de los dos ofrecer cuando ambos son elegibles lo decide `decide_action`, no este nodo.
+- **propension**: consulta el score de propensión (en producción, el modelo que construí en la Parte 1, vía un endpoint de inferencia).
+- **decide_action**: selecciona la siguiente mejor acción combinando elegibilidad + propensión + severidad de mora — reglas explícitas que escribí en `next_best_action.py`, no aprendidas por ningún modelo.
+- **respond**: el único nodo que usa el LLM, y solo para **redactar** —nunca para decidir. Le instruyo por system prompt que comunique exclusivamente lo que `decide_action` autorizó, pero soy consciente de que hoy eso es solo una instrucción de prompt, no una verificación programática posterior sobre el texto generado (lo dejo como limitación explícita en la sección 7).
+- **escalate_human**: nodo terminal para los casos que decidí que el sistema no debe resolver solo.
 
-## 4. Integración con la Parte 1 (modelo analítico)
+## 4. Cómo lo conecté con la Parte 1 (mi modelo analítico)
 
-`tools/propensity.py` es el punto de integración: en producción llamaría al
-servicio de inferencia entrenado en `src/ml/inference/predict.py` con las
-mismas features (lag1_*, prob_*, prevmes_*) construidas para la obligación.
-En este prototipo, como los perfiles son sintéticos y no tienen 6 meses de
-historial real, el score viene precalculado en el perfil como *stand-in*
-explícito — se documenta para que la sustitución sea transparente y no se
-confunda con el modelo real.
+`tools/propensity.py` es el punto de integración: en producción llamaría al servicio de inferencia que entrené en `src/ml/inference/predict.py`, con las mismas features (`lag1_*`, `prob_*`, `prevmes_*`) que construí para cada obligación. En este prototipo, como los perfiles son sintéticos y no tienen 6 meses de historial real, dejé el score precalculado en el perfil como *stand-in* explícito — lo documento así para que la sustitución sea transparente y nadie la confunda con el modelo real funcionando de verdad.
 
 ## 5. Seguridad, trazabilidad y cumplimiento
 
-- **Trazabilidad**: cada nodo agrega un evento a `state["trace"]` (nodo +
-  detalle de la decisión). En producción esto se persistiría como log de
-  auditoría inmutable (ver sección 7).
-- **Reglas de negocio fuera del LLM**: elegibilidad (`test_eligibility.py`) y
-  priorización (`test_next_best_action.py`) son código determinístico,
-  testeado unitariamente. El LLM nunca decide QUÉ ofrecer, solo CÓMO
-  comunicarlo — aunque, como se aclara en la sección de nodos, el "solo cómo"
-  hoy se garantiza por instrucción de prompt, no por verificación posterior.
-- **Guardrails previos al LLM**: la detección de manipulación/contenido
-  sensible no depende del LLM (sería circular: un intento de manipulación
-  podría intentar manipular también al clasificador). Se implementa con reglas
-  simples y auditables sobre el mensaje entrante.
-- **Escalamiento a humano**: por diseño, ante cualquier ambigüedad (datos
-  faltantes, restricciones legales, contenido sensible, manipulación) el
-  sistema escala en vez de intentar resolver.
+- **Trazabilidad**: cada nodo agrega un evento a `state["trace"]` con el detalle de su decisión. En producción lo persistiría como log de auditoría inmutable (sección 7).
+- **Reglas de negocio fuera del LLM**: elegibilidad (`test_eligibility.py`) y priorización (`test_next_best_action.py`) son código determinístico que probé unitariamente. El LLM nunca decide QUÉ ofrecer, solo CÓMO comunicarlo — aunque, como ya dije, ese "solo cómo" hoy se garantiza por instrucción de prompt, no por una verificación posterior real.
+- **Guardrails antes del LLM**: puse la detección de manipulación y contenido sensible fuera del LLM a propósito, porque depender del mismo modelo para vigilarse a sí mismo sería circular — un intento de manipulación podría intentar manipular también al clasificador. La implementé con reglas simples y auditables sobre el mensaje entrante.
+- **Escalamiento a humano**: por diseño, ante cualquier ambigüedad (datos faltantes, restricciones legales, contenido sensible, manipulación), hice que el sistema escale en vez de intentar resolver solo.
 
 ## 6. Pruebas (`tests/agents/`)
 
@@ -105,57 +57,22 @@ confunda con el modelo real.
 | Seguridad | `test_guardrails.py` | Prompt injection (incl. evasión por acentos/mayúsculas/espacios/inglés), contenido sensible, datos incompletos |
 | Integración end-to-end | `test_graph_scenarios.py` | Los 7+ escenarios del enunciado corridos sobre el grafo completo |
 
-Los tests de integración corren con `MockLLM` (sin necesitar `ANTHROPIC_API_KEY`),
-por lo que son reproducibles en cualquier entorno, incluido el de evaluación de
-esta prueba.
+Hice que los tests de integración corran con `MockLLM` (sin necesitar `ANTHROPIC_API_KEY`), para que sean reproducibles en cualquier entorno, incluido el de evaluación de esta prueba.
 
-## 7. Mecanismos propuestos para producción (NO implementados en este prototipo)
+## 7. Lo que propongo para producción (nada de esto está implementado)
 
-- **Orquestación y despliegue**: contenerizar el grafo como servicio (FastAPI +
-  LangGraph), desplegado en Kubernetes con autoscaling; el modelo de la Parte 1
-  servido como microservicio de inferencia independiente (versión propia,
-  rollback independiente del grafo de agentes).
+- **Orquestación y despliegue**: contenerizar el grafo como servicio (FastAPI + LangGraph), desplegado en Kubernetes con autoscaling; el modelo de la Parte 1 servido como microservicio de inferencia independiente, con versión y rollback propios.
 - **LLMOps**:
-  - Versionado de prompts y evaluación offline (golden set de conversaciones)
-    antes de cada despliegue de un cambio de prompt.
-  - Trazas completas (LangSmith o equivalente interno) de cada ejecución del
-    grafo: inputs, decisiones de cada nodo, tokens, latencia, costo.
-  - Evals automáticos de guardrails (batería de intentos de manipulación
-    conocidos) como gate de CI antes de cada release.
-  - Human-in-the-loop: muestreo de conversaciones para revisión humana
-    periódica, con feedback loop hacia el guardrail y el prompt.
-  - **Verificación post-generación**: antes de enviar al cliente el texto que
-    devuelve un LLM real, correr un chequeo programático (no otro LLM) que
-    confirme que la respuesta solo menciona la alternativa/plazo autorizados
-    por `decide_action` y ningún monto, descuento o promesa fuera de ese
-    contrato. Hoy esto solo se pide por prompt (ver nodo `respond`); es la
-    brecha más importante a cerrar antes de usar un LLM real en producción.
-  - Manejo explícito de fallos del LLM (timeout, rate-limit, API caída): la
-    llamada al LLM debe envolverse en un bloque de manejo de errores que
-    escale a un gestor humano en vez de propagar la excepción, con reintentos
-    acotados y circuit breaker.
+  - Versionado de prompts y evaluación offline (golden set de conversaciones) antes de cada despliegue de un cambio de prompt.
+  - Trazas completas (LangSmith o equivalente) de cada ejecución del grafo: inputs, decisiones de cada nodo, tokens, latencia, costo.
+  - Evals automáticos de guardrails (batería de intentos de manipulación conocidos) como gate de CI antes de cada release.
+  - Human-in-the-loop: muestreo de conversaciones para revisión humana periódica, retroalimentando al guardrail y al prompt.
+  - **Verificación post-generación**: antes de enviarle al cliente el texto que devuelve un LLM real, un chequeo programático (no otro LLM) que confirme que la respuesta solo menciona la alternativa/plazo autorizados por `decide_action`, sin ningún monto, descuento o promesa fuera de ese contrato. Hoy solo lo pido por prompt; para mí es la brecha más importante que hay que cerrar antes de poner un LLM real en producción.
+  - Manejo explícito de fallos del LLM: la llamada debe envolverse en un bloque que escale a un gestor humano en vez de propagar la excepción, con reintentos acotados y circuit breaker.
 - **Monitoreo en producción**:
-  - Tasa de escalamiento a humano por motivo (alerta si sube abruptamente:
-    puede indicar guardrail roto o cambio en el comportamiento de clientes).
-  - Distribución de acciones recomendadas vs. aceptadas realmente (deriva del
-    modelo de propensión o de las reglas de negocio).
-  - Latencia y disponibilidad de cada tool (CRM, modelo de propensión); circuit
-    breakers y fallback a "escalar a humano" si un servicio no responde.
-- **Seguridad de la información**: enmascaramiento/tokenización de datos
-  sensibles antes de que lleguen al LLM, control de acceso por rol a las trazas
-  de auditoría, y retención/tratamiento de datos conforme a la **Ley 1266 de
-  2008 (Habeas Data financiero)** — el CRM simulado de este prototipo no
-  implementa esto; en producción, ningún dato personal debería llegar al LLM
-  sin pasar antes por una capa de anonimización/tokenización auditada.
-- **Cumplimiento contable/regulatorio**: `policies/eligibility.py` marca con
-  `requiere_flujo_contable` las alternativas (hoy solo `REESTRUCTURACION`) que
-  bajo la **Circular Básica Contable y Financiera de la Superintendencia
-  Financiera** implican reclasificación de la calificación de riesgo y de la
-  provisión de la obligación, no solo un cambio operativo de plazo/cuota. El
-  motor NO decide esa reclasificación (requiere criterio de Riesgo/Contabilidad
-  y datos que este prototipo no tiene); solo la señala para que el flujo de
-  aprobación correspondiente se active aguas abajo, y nunca la aplica
-  automáticamente vía el LLM.
-- **Gobierno de cambios**: todo cambio a `policies/eligibility.py` (reglas de
-  negocio) requiere aprobación de riesgo/cumplimiento, con control de versión y
-  changelog auditable, separado del ciclo de despliegue del LLM/prompt.
+  - Tasa de escalamiento a humano por motivo (alerta si sube abruptamente: puede indicar un guardrail roto o un cambio en el comportamiento de los clientes).
+  - Distribución de acciones recomendadas vs. aceptadas realmente.
+  - Latencia y disponibilidad de cada tool (CRM, modelo de propensión); circuit breakers y fallback a "escalar a humano" si un servicio no responde.
+- **Seguridad de la información**: enmascaramiento/tokenización de datos sensibles antes de que lleguen al LLM, control de acceso por rol a las trazas de auditoría, y tratamiento de datos conforme a la **Ley 1266 de 2008 (Habeas Data financiero)** — mi CRM simulado no implementa esto todavía; en producción, ningún dato personal debería llegar al LLM sin pasar antes por una capa de anonimización auditada.
+- **Cumplimiento contable/regulatorio**: hice que `policies/eligibility.py` marque con `requiere_flujo_contable` las alternativas (hoy solo `REESTRUCTURACION`) que bajo la **Circular Básica Contable y Financiera de la Superintendencia Financiera** implican reclasificación de la calificación de riesgo y de la provisión de la obligación, no solo un cambio operativo de plazo o cuota. Mi motor NO decide esa reclasificación —eso requiere criterio de Riesgo/Contabilidad y datos que este prototipo no tiene— solo la señala para que el flujo de aprobación correspondiente se active después, y nunca la aplico automáticamente vía el LLM.
+- **Gobierno de cambios**: cualquier cambio a `policies/eligibility.py` debería requerir aprobación de riesgo/cumplimiento, con control de versión y changelog auditable, separado del ciclo de despliegue del LLM/prompt.

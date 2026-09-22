@@ -1,8 +1,6 @@
 # Arquitectura de producción — Parte 1 (Modelo de propensión)
 
-Propuesta de alto nivel de cómo operaría el pipeline analítico en producción.
-**Nada de esto está implementado** en el prototipo — es la propuesta de
-operación, tal como pide el enunciado.
+Esto es cómo pondría a operar en producción el modelo que construí, si tuviera que llevarlo más allá del prototipo. **No implementé nada de esto** — es la propuesta que pide el enunciado, pensada con la misma lógica de rigor que apliqué durante el desarrollo.
 
 ## 1. Vista general del ciclo
 
@@ -34,92 +32,38 @@ Datos crudos (core bancario, CRM, buró)
 
 ## 2. Preparación de datos (equivalente productivo de `build_dataset.py`)
 
-- **Orquestación**: job batch mensual (Airflow/Databricks Jobs/similar),
-  disparado al cierre contable del mes, no antes — el pipeline depende de que
-  M-1 esté cerrado (mora, pagos, gestión consolidados).
-- **Feature store**: las features construidas (`lag1_*`, `prob_*_roll6m`,
-  `lag1_var_rpta_alt`, etc.) se materializan versionadas por mes de corte, no
-  se recalculan on-the-fly en cada scoring. Esto permite auditar exactamente
-  qué datos vio el modelo en cada corrida, y reproducir un incidente.
-- **Validación de esquema y de fuga**: antes de que el pipeline avance al
-  entrenamiento, un test automatizado (ver `tests/ml/`, hoy pendiente de
-  implementar) verifica que ninguna columna con fecha de corte posterior o
-  igual al mes objetivo entre al feature set — el mismo chequeo que hoy se
-  hace manualmente al revisar `build_dataset.py`.
-- **Contrato de datos** con las fuentes upstream (core, CRM, buró): si una
-  tabla fuente cambia de esquema o de frecuencia de corte sin aviso (como
-  ocurrió con `master_customer_data`, que no se refresca completo cada mes),
-  el pipeline debe fallar de forma visible, no silenciosa.
+- **Orquestación**: un job batch mensual (Airflow, Databricks Jobs o similar), disparado al cierre contable del mes, no antes — mi pipeline depende de que M-1 esté cerrado (mora, pagos, gestión ya consolidados). Si se dispara antes de tiempo, se contamina exactamente el mismo problema que pasé la mitad del desarrollo evitando.
+- **Feature store**: las features que construí (`lag1_*`, `prob_*_roll6m`, `lag1_var_rpta_alt`, etc.) se materializarían versionadas por mes de corte, no recalculadas al vuelo en cada scoring. Eso me permitiría auditar exactamente qué datos vio el modelo en cada corrida, algo que hoy hago manualmente revisando `build_dataset.py`.
+- **Validación de esquema y de fuga automatizada**: ya escribí pruebas para esto (`tests/ml/`), pero en producción las correría como un gate obligatorio del pipeline, no como algo que reviso a mano: si alguna columna con fecha de corte posterior o igual al mes objetivo se cuela en el feature set, el pipeline debe fallar antes de entrenar, no después.
+- **Contrato de datos** con las fuentes upstream (core, CRM, buró): si una tabla cambia de esquema o de frecuencia sin aviso —como me pasó con `master_customer_data`, que no se refresca completa cada mes y me obligó a resolverlo con un join "as of"— el pipeline tiene que fallar de forma visible, no silenciosa.
 
 ## 3. Entrenamiento y reentrenamiento
 
-- **Disparadores de reentrenamiento**: (a) calendario fijo (p. ej. trimestral),
-  y (b) por deriva detectada en monitoreo (sección 6) — nunca reentrenamiento
-  ad-hoc sin registro.
-- **Metodología de validación**: se mantiene el esquema de 3 folds temporales
-  (FIT/CALIB/REPORT) usado en el desarrollo — nunca calibrar umbral e
-  hiperparámetros sobre el mismo mes que se reporta como métrica de
-  aceptación del modelo.
-- **Selección de algoritmo**: XGBoost quedó como base tras comparar contra
-  LightGBM y CatBoost (ver `models/ensemble_comparison.json`); el pipeline de
-  entrenamiento en producción debería correr esa comparación en cada
-  reentrenamiento relevante, no asumir que el ganador se mantiene para
-  siempre — el ranking podría cambiar si la naturaleza de los datos cambia.
-- **Registro de modelos**: cada corrida se versiona (MLflow Model Registry o
-  equivalente) con métricas (F1/AUC/precision/recall sobre REPORT), parámetros,
-  y un hash de la versión del feature set usado — nunca promover a producción
-  sin ese registro completo.
+- **Disparadores**: calendario fijo (por ejemplo trimestral) y deriva detectada en monitoreo (sección 6) — nunca reentrenamiento improvisado sin dejar registro de por qué se hizo.
+- **Metodología de validación**: mantendría el mismo esquema de 3 tramos (FIT/CALIB/REPORT) que usé en el desarrollo. Ya viví lo que pasa cuando no se respeta esto —el número se infla— así que no lo negociaría ni siquiera bajo presión de mostrar un número más alto.
+- **Selección de algoritmo**: me quedé con XGBoost después de comparar contra LightGBM y CatBoost (`models/ensemble_comparison.json`), pero en producción correría esa misma comparación en cada reentrenamiento relevante — no doy por sentado que el ganador de hoy siga siendo el mejor si la naturaleza de los datos cambia.
+- **Registro de modelos**: cada corrida quedaría versionada (MLflow Model Registry o equivalente) con sus métricas sobre REPORT, sus parámetros, y un hash de la versión del feature set usado. Nada pasa a producción sin ese registro completo.
 
 ## 4. Aprobación y despliegue
 
-- **Gate de aprobación humana**: ningún modelo pasa a producción solo porque
-  "el número subió" — un comité técnico (Riesgo + Analítica) revisa el
-  reporte de validación, incluyendo el análisis de sesgo de selección/uplift
-  documentado en el documento técnico, antes de aprobar.
-- **Despliegue**: el modelo se sirve como microservicio de inferencia
-  independiente del resto del pipeline (y del sistema agéntico de la Parte 2),
-  con versión propia y posibilidad de rollback sin afectar otros componentes.
-- **Canary / shadow**: un modelo nuevo corre en modo *shadow* (calcula
-  predicciones sin que se usen operativamente) durante al menos un ciclo de
-  cobranza completo antes de reemplazar al modelo vigente.
+- **Aprobación humana como filtro**: ningún modelo entra a producción solo porque "el número subió". Antes de aprobar, un comité de Riesgo y Analítica revisaría el reporte de validación completo, incluyendo el análisis de sesgo de selección y propensión-vs-uplift que dejé documentado — ese es justamente el tipo de pregunta que no quiero que se salte nadie.
+- **Despliegue independiente**: serviría el modelo como un microservicio de inferencia separado del resto del pipeline y del sistema agéntico de la Parte 2, con versión y rollback propios.
+- **Shadow antes de reemplazar**: un modelo nuevo correría en modo *shadow* (calculando predicciones sin que se usen operativamente) durante al menos un ciclo completo de cobranza antes de reemplazar al vigente.
 
 ## 5. Inferencia en producción
 
-- **Modo principal**: batch mensual, alineado al ciclo de priorización de
-  cartera existente — se calcula `Prob_uno` para toda la cartera en mora al
-  cierre de cada mes, y se entrega como variable adicional al motor de
-  priorización por lotes ya existente en el banco.
-- **Consumo por el sistema agéntico**: el score se expone como una tabla/API
-  de solo lectura que el nodo `propension` del grafo de agentes (Parte 2)
-  consulta por obligación — hoy ese nodo usa un valor precalculado de un
-  perfil sintético como *stand-in* explícito de esta integración real.
-- **Manejo de obligaciones nuevas**: una obligación sin historial suficiente
-  (alta tasa de nulos en `lag1_*`, ver EDA) recibe un score con menor
-  confianza; el pipeline debe exponer también un indicador de confianza/
-  cobertura de features, no solo la probabilidad puntual.
+- **Modo principal**: batch mensual, alineado al ciclo de priorización existente — calcularía `Prob_uno` para toda la cartera en mora al cierre de cada mes, como una variable adicional al motor de priorización por lotes que ya tiene el banco.
+- **Cómo lo consumiría el sistema agéntico**: expondría el score como una tabla o API de solo lectura que el nodo `propension` de mi grafo de agentes (Parte 2) consultaría por obligación. Hoy ese nodo usa un valor precalculado de un perfil sintético, precisamente como *stand-in* explícito de esta integración real.
+- **Obligaciones nuevas**: una obligación sin historial suficiente (ya vi cuánta gente cae en esta categoría al revisar los nulos de `lag1_*`) recibiría un score de menor confianza, y expondría también un indicador de cobertura de features, no solo la probabilidad puntual — para que quien use el score sepa cuándo confiar menos en él.
 
 ## 6. Monitoreo en producción
 
-- **Deriva de datos (data drift)**: distribución de las features clave
-  (`lag1_var_rpta_alt`, `prob_propension_roll6m`, mora) mes a mes, contra la
-  distribución de entrenamiento — alerta si se desvía más allá de un umbral.
-- **Deriva de desempeño**: F1/AUC reales del mes, calculados un mes después
-  (cuando se conoce el `var_rpta_alt` real) — nunca esperar al siguiente
-  reentrenamiento programado para descubrir que el modelo se degradó.
-- **Estacionalidad conocida**: dado que en el desarrollo diciembre mostró una
-  caída sistemática de F1 frente a noviembre en los tres algoritmos probados,
-  el monitoreo debe tener umbrales de alerta ajustados por mes/temporada, no
-  un único umbral fijo todo el año.
-- **Dependencia de `prob_*` del banco**: si el score de propensión ya
-  existente en el banco (usado como insumo) cambia de metodología, el
-  pipeline debe detectarlo (cambio abrupto en la distribución de esa
-  variable) antes de que degrade silenciosamente el modelo nuevo.
+- **Deriva de datos**: seguiría la distribución de las features clave (`lag1_var_rpta_alt`, `prob_propension_roll6m`, mora) mes a mes contra la de entrenamiento, con alerta si se desvía más allá de un umbral.
+- **Deriva de desempeño**: calcularía F1/AUC reales un mes después de cada corrida, en cuanto se conozca el `var_rpta_alt` real — no esperaría al siguiente reentrenamiento programado para enterarme de que el modelo se degradó.
+- **Estacionalidad, porque ya la viví**: en mi desarrollo, diciembre mostró una caída sistemática de F1 frente a noviembre, en los tres algoritmos que probé. Por eso pondría umbrales de alerta ajustados por mes, no uno fijo todo el año — un modelo que "empeora" en diciembre puede ser normal, no una falla.
+- **Dependencia de los scores del banco**: si `prob_propension` u otras variables que ya existían en el banco cambian de metodología sin avisar, el pipeline tiene que detectarlo antes de que degrade silenciosamente mi modelo.
 
 ## 7. Gobierno de datos y cumplimiento
 
-- Igual que en la Parte 2: todo cambio a la definición de la variable
-  respuesta o a las reglas de negocio que la originan requiere aprobación de
-  Riesgo, versionado y changelog auditable.
-- Los datos personales usados en el feature set (perfil del cliente) deben
-  tratarse conforme a la Ley 1266 (Habeas Data financiero) durante todo el
-  ciclo, no solo en el punto de contacto con el cliente.
+- Igual que en la Parte 2: cualquier cambio a la definición de la variable respuesta o a las reglas de negocio que la originan necesita aprobación de Riesgo, con versionado y changelog auditable.
+- Los datos personales del feature set (perfil del cliente) deben tratarse conforme a la Ley 1266 (Habeas Data financiero) durante todo el ciclo, no solo en el punto de contacto con el cliente.
