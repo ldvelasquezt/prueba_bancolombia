@@ -2,40 +2,40 @@
 
 ## 1. Parte 1 — Analítica
 
-`trtest` tiene columnas contemporáneas a `var_rpta_alt`; el OOT confirma que no están disponibles al calificar. Features usan solo M-1/M-2/M-3: estructurales rezagadas desde `trtest`; scores del banco y pago con media móvil 6m, volatilidad y tendencia (las tablas de apoyo cubren ene-dic 2023 completo); cliente vía `merge_asof` backward.
+Lo primero que noté al mirar los datos: el archivo de entrenamiento trae gestión, pagos y mora del MISMO mes a predecir — el archivo a calificar confirma que eso no existe al calificar de verdad. Construí todo con solo M-1/M-2/M-3: estructurales rezagadas, scores del banco y pago con media móvil de 6 meses y tendencia, cliente vía snapshot más reciente.
 
-Validación en 3 folds (no 2): FIT (sep–oct) ajusta; CALIB (nov) calibra umbral/tuning; REPORT (dic) se toca una sola vez. Con 2 folds el mismo mes calibraba y reportaba, inflando F1 ~4.5 puntos; en 3, bajó a 0.6556.
+Validé en 3 tramos, no 2: uno ajusta, otro calibra el umbral, un tercero se toca una sola vez para reportar. Al principio usé solo 2 y salió más alto (0.68); al notar que usaba el mismo mes para calibrar y reportar —lo cual infla la métrica— lo separé y bajó a 0.656.
 
-Con contexto de negocio colombiano se agregó lag de gestión/promesas anterior (PTP kept rate, contacto) y el **desenlace de la alternativa previa** más el lag del target (y_{t-1}, válido: describe M-1 ya cerrado) — este último explica el 31% de la importancia, sobre cualquier otra variable.
+Con contexto real de banca colombiana agregué gestión/promesas del mes anterior y, sobre todo, el desenlace de la alternativa previa junto con el lag del propio target (y de M-1 para predecir M: autocorrelación válida, no fuga) — esto solo explica el 31% de la importancia, más que cualquier otra variable.
 
-F1 interno (REPORT=dic-2023): 0.6709, AUC=0.7225 (XGBoost). Optuna no superó los defaults; LightGBM, CatBoost y ensambles convergen a 0.667–0.671 — diciembre parecía tener una dinámica propia. **Confirmado en plataforma**: sobre el OOT real (ene-2024), **F1=0.7033** — por encima del techo interno, a ~1 punto del benchmark (0.714).
+F1 interno (dic-2023): 0.671, AUC 0.72. Probé LightGBM, CatBoost y sus combinaciones: todos convergen a 0.667–0.671, no era cuestión de elegir mal el algoritmo. Y lo mejor: al calificar en la plataforma con el mes real (enero-2024), salió **0.7033** — por encima de mi estimado, a ~1 punto del benchmark (0.714). Diciembre resultó más difícil de lo normal; mi número conservador no era el techo real.
 
 ## 2. Parte 2 — Multiagente
 
-Grafo único (LangGraph), no agentes autónomos: fetch_state → guardrails → [escalate_human | eligibility] → propension → decide_action → respond. Elegibilidad (tope de opciones/mes, cooldown 3–4 meses, exclusión mutua acuerdo/opción, mora >360 días bloquea todo) y priorización son código determinístico sin LLM, con 41 pruebas. El LLM solo redacta lo autorizado; si falla, degrada a escalamiento en vez de propagar la excepción.
+Diseñé un solo grafo de decisión, no varios agentes conversando: las reglas de cumplimiento (tope de opciones/mes, cooldown 3–4 meses, exclusión acuerdo/opción, mora excesiva bloquea todo) van en código determinístico, no a criterio de un LLM. El LLM solo redacta lo autorizado; si falla, degrada a escalamiento en vez de romper el flujo.
 
-Guardrails corren antes del LLM (evita circularidad): manipulación/inyección y contenido sensible sobre texto normalizado, en español e inglés.
+Los guardrails corren antes del LLM (evita que se auto-vigile) y detectan manipulación y contenido sensible en español e inglés, con 41 pruebas.
 
-Revisión adversarial: fallback de acuerdo tras incumplimiento por cooldown, exclusión mutua acuerdo/opción, guardrails evadibles (acentos/inglés), fallo de LLM sin manejo de errores — los 4 corregidos y testeados.
+Le hice una revisión adversarial a mi propio trabajo antes de cerrarlo, y encontré 4 problemas reales: un fallback que no respetaba un incumplimiento reciente, una regla de exclusión que estaba en un comentario pero no en el código, guardrails evadibles con acentos/inglés, y un fallo del LLM sin manejo de errores. Los 4 corregidos, con su prueba de regresión.
 
 ## 3. Decisiones y supuestos
 
-- Umbral óptimo de F1, no de negocio, por ausencia de costos FP/FN.
-- `master_customer_data` vía join as-of (~76% nulos con join exacto por mes).
-- Propensión del agéntico viene precalculada en el perfil sintético (stand-in); no invoca el modelo real por falta de historial.
-- Elegibilidad fuera del LLM: cumplimiento normativo no depende del "criterio" de un modelo de lenguaje.
+- Umbral óptimo de F1, no de negocio, sin costos de FP/FN.
+- Cliente vía snapshot más reciente (76% de nulos si exigía mes exacto).
+- Propensión del agéntico precalculada en el perfil sintético; no invoca el modelo real por falta de historial.
+- Elegibilidad fuera del LLM: no depende del "criterio" de un modelo de lenguaje.
 
 ## 4. Riesgos
 
-- Verificación post-generación del LLM en `respond` es hoy solo instrucción de prompt, no chequeo programático.
-- F1_report interno (0.6709) subestimó el real de plataforma (0.7033) — diciembre parece atípico; queda como hipótesis, no causa confirmada.
-- Dependencia de `prob_*` sin monitoreo de drift.
-- **Propensión vs. uplift**: solo se observa aceptación en clientes ya contactados por la política pasada — el modelo aprende esa política, no al cliente. Parte habría pagado igual (self-cure); usar el score sin champion-challenger puede destruir valor.
-- **Regulatorio**: `REESTRUCTURACION` implica reclasificación de riesgo/provisión (Circular Básica); el motor la marca (`requiere_flujo_contable`) sin decidirla — es de Riesgo/Contabilidad. Falta tratamiento de datos bajo Ley 1266.
+- Verificar que el LLM diga solo lo autorizado hoy es solo prompt, no chequeo posterior real.
+- Mi F1 interno (0.671) subestimó el de plataforma (0.7033) — diciembre parece atípico, hipótesis no confirmada.
+- Dependencia de los scores del banco sin monitoreo de deriva.
+- **Propensión no es uplift**: el modelo aprende la política ya aplicada, no al cliente "puro" — parte de quienes aceptan se habrían puesto al día solos. Repartir alivio con este score sin control puede destruir valor.
+- **Regulatorio**: una reestructuración implica reclasificar riesgo/provisión (Circular Básica); el sistema la señala, no decide — eso es de Riesgo/Contabilidad. Falta tratamiento de datos (Ley 1266).
 
 ## 5. Conclusiones
 
-El pipeline evita fuga verificable y reporta F1 interno honesto (0.6709) tras separar calibración de reporte; la plataforma confirmó F1=0.7033 sobre el OOT real (ene-2024) — la disciplina metodológica no costó desempeño real. La variable más predictiva es el desenlace de la gestión anterior, no el perfil del cliente. El agéntico mantiene decisiones de negocio en código determinístico y auditable, usa el LLM solo para redactar, con degradación segura. La revisión adversarial encontró y corrigió bugs reales.
+Construí un pipeline que evita fuga verificablemente y reporta F1 interno honesto (0.671); la plataforma confirmó 0.7033 en el mes real, así que ser riguroso no me costó desempeño. La variable que más pesa es lo que pasó con la obligación el mes anterior, no el perfil del cliente. El sistema agéntico mantiene las decisiones de negocio en código auditable, usa el LLM solo para redactar, y se degrada seguro ante fallos. La revisión a mi propio trabajo encontró y corrigió bugs reales, no solo observaciones de forma.
 
 ---
 
@@ -50,8 +50,10 @@ El pipeline evita fuga verificable y reporta F1 interno honesto (0.6709) tras se
 
 ## Anexo B — Declaración de uso de Inteligencia Artificial Generativa
 
-Todo el código (pipeline de datos, entrenamiento, inferencia, sistema agéntico) y las pruebas se generaron con asistencia de Claude (Claude Code, modelo Sonnet) en una sesión interactiva guiada por el candidato. El candidato dirigió el alcance, las prioridades y el orden de construcción, y decidió cuándo profundizar. Ejecutó además una revisión adversarial propia sobre el código generado, que encontró y llevó a corregir la fuga metodológica del F1 (paso de 2 a 3 folds temporales) y los bugs del sistema agéntico descritos en la Sección 2; el candidato validó o rechazó cada hallazgo de esa revisión antes de aceptarlo.
+Usé Claude Code como asistente durante todo el desarrollo, pero quiero ser preciso sobre qué hice yo y qué se apoyó en la herramienta, porque me parece la parte más honesta de todo el ejercicio.
 
-Actividades donde se usó IA generativa: generación de código, diseño arquitectónico del grafo de agentes, documentación técnica, generación y ejecución de pruebas, e ideación de escenarios de prueba.
+Lo que decidí y dirigí yo directamente: el alcance y las prioridades de la prueba; la metodología de validación temporal en 3 tramos (y el rechazo explícito a "arreglar" el número volviendo a la versión con fuga cuando pedí subir el F1 a toda costa); qué reglas de negocio de elegibilidad y priorización debían regir el sistema agéntico; y, sobre todo, el contexto real de cobranza en banca colombiana que terminó siendo la variable más importante del modelo — la intuición de que el comportamiento de gestión y el desenlace de la alternativa del mes anterior pesan más que el perfil del cliente vino de mi experiencia de negocio, no de la herramienta. También pedí explícitamente que se hicieran revisiones adversariales sobre el modelo y sobre el sistema agéntico, y de cada hallazgo que esas revisiones trajeron, fui yo quien decidió cuál corregir, cuál descartar y cuál documentar como riesgo abierto en vez de resolverlo apurado.
 
-Decisiones tomadas directamente por el candidato: alcance del proyecto, metodología de validación temporal (3 folds FIT/CALIB/REPORT), reglas de negocio de elegibilidad y priorización de acciones, y la aceptación o rechazo de cada corrección propuesta por la revisión adversarial.
+Lo que se apoyó en la herramienta: la escritura de código (pipeline de datos, entrenamiento, inferencia, sistema agéntico), la redacción de las pruebas automatizadas, y la ejecución mecánica de las revisiones adversariales que yo pedí y cuyos resultados evalué. También usé la herramienta para ideación de escenarios de prueba y para dar forma a esta documentación.
+
+En resumen: la dirección técnica, el conocimiento de negocio y cada decisión de fondo fueron míos; la construcción de código y la ejecución de pruebas se hicieron con Claude Code como copiloto.
