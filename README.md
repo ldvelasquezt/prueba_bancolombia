@@ -1,59 +1,56 @@
-# Prueba Analítica Bancolombia — Propensión a Opciones de Pago + Sistema Agéntico
+# Prueba Analítica Bancolombia — Propensión a opciones de pago + sistema agéntico
 
-Repositorio para la prueba analítica: (1) modelo de propensión a la aceptación de
-opciones de pago con prácticas de MLOps, y (2) prototipo de sistema agéntico para
-gestión proactiva/reactiva de clientes en mora.
+Son dos cosas: un modelo que estima qué tan probable es que un cliente en mora acepte una
+opción de pago, y un prototipo de sistema agéntico que gestiona a esos clientes, tanto
+cuando el banco los busca como cuando ellos escriben.
 
-## Estructura del repositorio
+## Cómo está organizado
 
 ```
-data/                  Datos (raw/ no versionado; ver data/README.md)
-  raw/                 Archivos entregados por el banco
-  processed/           Datasets de train/oot listos para modelar (no versionado)
-  submissions/         resultado_prueba.csv (entregable), kaggle_submission.csv
-  synthetic/           Perfiles sintéticos para el prototipo agéntico
+data/                  Los datos (raw/ no va a git; mirar data/README.md)
+  raw/                 Lo que entregó el banco
+  processed/           Train y OOT listos para modelar (tampoco va a git)
+  submissions/         resultado_prueba.csv y kaggle_submission.csv
+  synthetic/           Perfiles inventados para el prototipo agéntico
 
-notebooks/             EDA ligero
+notebooks/             Un EDA ligero
 
-models/                Modelo entrenado (xgb_baseline.json), feature_config.json,
-                       comparación de modelos (ensemble_comparison.json)
+models/                El modelo entrenado, feature_config.json y la comparación
+                       entre algoritmos
 
 src/
-  ml/                  Parte 1 — pipeline de Machine Learning
-    data/              build_dataset.py: features sin fuga, joins de fuentes crudas
-    training/          train_baseline.py (XGBoost), train_ensemble.py (comparación
-                       contra LightGBM/CatBoost)
-    inference/         predict.py (resultado_prueba.csv), build_kaggle_submission.py
-  agents/              Parte 2 — sistema agéntico
-    graph/             Grafo de agentes (LangGraph)
-    tools/             CRM simulado, wrapper de propensión
-    policies/          Reglas de elegibilidad, priorización (NBA) y guardrails
+  ml/                  Parte 1 — el pipeline de machine learning
+    data/              build_dataset.py: arma las features y une las fuentes
+    training/          train_baseline.py (XGBoost) y train_ensemble.py, que lo
+                       compara contra LightGBM y CatBoost
+    inference/         predict.py y build_kaggle_submission.py
+  agents/              Parte 2 — el sistema agéntico
+    graph/             El grafo (LangGraph)
+    tools/             CRM simulado y wrapper del score de propensión
+    policies/          Elegibilidad, priorización (NBA) y guardrails
 
 tests/
-  agents/              41 pruebas: reglas de negocio, seguridad, integración end-to-end
-  ml/                  Pendiente (ver docs/tecnico/ — riesgo declarado, no oculto)
+  agents/              41 pruebas: reglas de negocio, seguridad e integración
+  ml/                  14 pruebas de contrato del dataset: esquema y ausencia de fuga
 
 docs/
-  tecnico/             Documento técnico (máx. 4000 caracteres + anexos)
-  arquitectura/        mlops_produccion.md (Parte 1) y sistema_agentico.md (Parte 2)
+  tecnico/             El documento técnico
+  arquitectura/        Un documento por cada parte de la prueba
 
-requirements.txt       Dependencias (Python 3.12 + venv)
+requirements.txt       Dependencias (Python 3.12 con venv)
 ```
 
-## Entregables mapeados a este repo
+## Dónde queda cada entregable
 
 1. **Documento técnico** → `docs/tecnico/documento_tecnico.md`
-2. **Presentación ejecutiva** → Artifact separado (deck de 16 diapositivas, 15 min);
-   no se entrega el .pptx, se usa en la sustentación
-3. **Archivo de resultados** → `data/submissions/resultado_prueba.csv` (ID, var_rpta_alt,
-   Prob_uno); `data/submissions/kaggle_submission.csv` es el mismo resultado en el
-   formato exacto de `sample_submission.csv` (solo ID, var_rpta_alt) para subir a la
-   plataforma de calificación
-4. **Código y repositorio** → todo este repo
-5. **Arquitectura y operación en producción** → `docs/arquitectura/` (dos documentos:
-   uno por cada parte de la prueba)
+2. **Presentación ejecutiva** → va aparte, 16 diapositivas para la sustentación
+3. **Archivo de resultados** → `data/submissions/resultado_prueba.csv` con ID,
+   var_rpta_alt y Prob_uno. El `kaggle_submission.csv` es lo mismo en el formato de
+   `sample_submission.csv`, que es el que se sube a la plataforma
+4. **Código y repositorio** → todo esto
+5. **Arquitectura y producción** → `docs/arquitectura/`
 
-## Quickstart
+## Para arrancar
 
 ```bash
 python -m venv .venv
@@ -61,12 +58,9 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-Los pasos concretos de cada pipeline (preparación de datos, entrenamiento, inferencia,
-grafo de agentes) se documentan en el README de cada subcarpeta de `src/` a medida que
-se implementan.
+El detalle del sistema agéntico está en `src/agents/README.md`. Para el pipeline de ML,
+los pasos están en los docstrings de cada módulo de `src/ml/`.
 
-## Declaración de uso de IA generativa
+## Sobre el uso de IA generativa
 
-Ver `docs/tecnico/` — se documentará explícitamente en qué fases se usó IA generativa
-(código, arquitectura, documentación, pruebas, ideación) y qué decisiones fueron
-tomadas directamente por el candidato.
+Está en el Anexo B de `docs/tecnico/documento_tecnico.md`.

@@ -1,39 +1,38 @@
 # Sistema agéntico de cobranza
 
-Prototipo funcional de agentes coordinados para gestionar proactiva y
-reactivamente clientes en mora, ofreciendo únicamente acuerdos u opciones de
-pago para los que el cliente sea elegible.
+Prototipo de agentes coordinados para gestionar clientes en mora. Atiende las dos puntas:
+la campaña saliente y el cliente que escribe por su cuenta. Lo que no quería es que le
+ofreciera un acuerdo o una opción de pago a alguien que no es elegible, así que esa
+decisión no pasa por el LLM.
 
-Ver [docs/arquitectura/sistema_agentico.md](../../docs/arquitectura/sistema_agentico.md)
-para la arquitectura completa.
+La arquitectura está en
+[docs/arquitectura/sistema_agentico.md](../../docs/arquitectura/sistema_agentico.md).
 
-## Quickstart
+## Para probarlo
 
 ```bash
-# Demo end-to-end sobre 9 escenarios sintéticos (no requiere API key)
+# Demo de punta a punta sobre los 9 escenarios sintéticos. No necesita API key
 python -m src.agents.run_demo
 
-# Tests (unitarios + integración)
+# Las pruebas
 pytest tests/agents -v
 ```
 
-## Con un LLM real
+## Si quiere correrlo contra Claude
 
-Si se exporta `ANTHROPIC_API_KEY`, `src/agents/llm_client.py` usa Claude de
-verdad para el nodo `respond` (redacción de la respuesta al cliente). Sin la
-key, usa un `MockLLM` determinístico para que el grafo completo sea
-reproducible y testeable en cualquier entorno.
+Cuando existe `ANTHROPIC_API_KEY`, `src/agents/llm_client.py` llama al modelo real para el
+nodo `respond`, que redacta la respuesta al cliente. Sin la key usa un `MockLLM`
+determinístico, para que el grafo se pueda correr y probar en cualquier máquina.
 
 ```bash
 $env:ANTHROPIC_API_KEY = "sk-..."
 python -m src.agents.run_demo
 ```
 
-## Datos sintéticos
+## Los datos sintéticos
 
-`data/synthetic/customer_profiles.json` contiene 9 perfiles cliente-obligación
-sintéticos (identificados como tales, sin información personal real), uno por
-cada escenario relevante del enunciado de la prueba: mora temprana con alta
-propensión, múltiples opciones elegibles, cooldown activo, incumplimiento
-previo, contacto reactivo, datos incompletos, intento de manipulación,
-solicitud sensible y restricción legal activa.
+`data/synthetic/customer_profiles.json` tiene 9 perfiles cliente-obligación inventados, sin
+información personal real. Cubren los escenarios del enunciado: mora temprana con alta
+propensión, varias opciones elegibles al tiempo, cooldown activo, incumplimiento previo,
+contacto reactivo, datos incompletos, intento de manipulación, solicitud sensible y
+restricción legal vigente.
