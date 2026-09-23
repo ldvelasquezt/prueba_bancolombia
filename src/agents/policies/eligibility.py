@@ -13,10 +13,12 @@ Reglas mínimas (ver enunciado de negocio):
     3 a 4 meses (dependiendo del tipo de alternativa) antes de volver a ser
     elegible para otra opción de pago.
   - Los acuerdos de pago (compromiso de pago a máx. 5 días) se pueden
-    gestionar de forma recurrente en distintas etapas de cobranza, SIEMPRE
-    que el cliente no haya aceptado una opción de pago vigente y no exista
-    una restricción que impida su ofrecimiento (p. ej. mora muy avanzada,
-    fraude, obligación en proceso judicial).
+    gestionar de forma recurrente en distintas etapas de cobranza, siempre
+    que no exista otro acuerdo vigente ni una restricción que impida su
+    ofrecimiento (p. ej. mora muy avanzada, fraude, proceso judicial).
+    El cooldown aplica solo a nuevas opciones de pago: si la obligación ya
+    tiene una alternativa aplicada y vuelve a caer en mora, se le puede
+    ofrecer un acuerdo de pago (es un compromiso de pago, no un alivio nuevo).
 """
 from __future__ import annotations
 

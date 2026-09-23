@@ -45,7 +45,12 @@ def main():
             oot["num_oblig_enmascarado"].astype(str)
         ),
         "var_rpta_alt": var_rpta_alt,
-        "Prob_uno": prob_uno.round(5),
+        # Redondear a 5 decimales puede llevar una prob. apenas menor al umbral
+        # justo al umbral (p. ej. 0.339996 -> 0.34) y dejar la fila incoherente con
+        # var_rpta_alt=0; en esos casos se muestra el valor inmediatamente inferior.
+        "Prob_uno": np.where(var_rpta_alt == 0,
+                             np.minimum(prob_uno.round(5), threshold - 1e-5),
+                             prob_uno.round(5)),
     })
 
     import os

@@ -108,4 +108,12 @@ def test_fallo_del_llm_degrada_a_escalamiento_no_crashea(monkeypatch):
     result = run(app_con_fallo, "OB-001")  # caso que normalmente llega a `respond`
     assert result["requiere_escalamiento"] is True
     assert result["respuesta_agente"]  # sigue devolviendo algo, nunca crashea
-    assert any(t["nodo"] == "respond" for t in result["trace"])
+    nodos = [t["nodo"] for t in result["trace"]]
+    assert nodos[-2:] == ["respond", "escalate_human"]
+
+
+def test_solicitud_sensible_se_etiqueta_como_sensible(app):
+    # OB-008 amenaza con demanda y a la vez pide condonación: debe llegar al gestor
+    # como contenido sensible, no como manipulación.
+    result = run(app, "OB-008")
+    assert "sensible" in result["razon_escalamiento"].lower()

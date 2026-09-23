@@ -12,7 +12,8 @@ Dos hallazgos clave:
    disponible al momento de calificar: solo trae los IDs y el mes objetivo.
 
 Por lo tanto todos los features —estructurales y de comportamiento— se
-construyen exclusivamente con información de meses ANTERIORES (M-1, M-2, M-3):
+construyen exclusivamente con información de meses ANTERIORES al mes objetivo
+(el último mes usado es M-1; las ventanas llegan hasta 6 meses atrás):
   - Los propios atributos "estructurales" de la obligación se obtienen
     reutilizando `trtest` como fuente histórica (la fila de la obligación en el
     mes M-1 aporta su mora/saldo/producto de esa fecha, ya conocidos al cierre
@@ -20,7 +21,7 @@ construyen exclusivamente con información de meses ANTERIORES (M-1, M-2, M-3):
     también está disponible en `trtest`, que cubre hasta esa fecha.
   - Scores existentes del banco (`probabilidad_oblig_base_hist`) y
     comportamiento de pago (`maestra_cuotas_pagos_mes_hist`): además del valor
-    de M-1, se agregan promedios móviles de 3 meses y tendencia (M-1 vs M-3)
+    de M-1, se agregan media y volatilidad móviles de 6 meses y tendencia
     para capturar deterioro/mejora reciente, no solo el último corte.
   - Perfil del cliente (`master_customer_data`), anclado al snapshot más
     reciente disponible en o antes de M-1.

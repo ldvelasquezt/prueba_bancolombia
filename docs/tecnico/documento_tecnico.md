@@ -3,16 +3,16 @@ Documento técnico: Prueba Analítica Bancolombia
 1. Modelo de propensión
 
 Construcción del dataset
-El archivo de entrenamiento trae gestión, pagos y mora del mismo mes objetivo, información que no existe al momento de calificar y que generaría fuga. Por eso el dataset usa solo M-1, M-2 y M-3: variables estructurales rezagadas (por su autocorrelación), scores internos del banco, pago con media móvil de 6 meses y su tendencia, y datos del cliente del snapshot más reciente. Resultan 90 variables, 26 categóricas.
+El archivo de entrenamiento trae gestión, pagos y mora del mismo mes objetivo, información que no existe al momento de calificar y que generaría fuga. Por eso el dataset usa solo meses anteriores (hasta M-1, con ventanas de 6 meses): variables estructurales rezagadas (por su autocorrelación), scores internos del banco, pago con media móvil de 6 meses y su tendencia, y datos del cliente del snapshot más reciente. Resultan 90 variables, 26 categóricas.
 
 Esquema de validación
 FIT (septiembre y octubre de 2023): entrenamiento.
-CALIB (noviembre): early stopping, hiperparámetros con Optuna y calibración del umbral.
-REPORT (diciembre): evaluación final, usada una sola vez y sin intervenir en decisiones.
+CALIB (noviembre): early stopping y calibración del umbral.
+REPORT (diciembre): evaluación final. Sin embargo, en etapas previas del desarrollo diciembre sirvió como validación para elegir hiperparámetros y variables, así que su F1 (0.6709) es algo optimista; la validación realmente independiente es la de la plataforma.
 El modelo desplegado se reentrena con los tres tramos, con el número de árboles fijo en 402, el obtenido en calibración.
 
 Importancia de variables
-Pesa más el comportamiento reciente de la obligación: gestión y promesas del mes anterior, desenlace de la alternativa previa y el lag del target. Este último no es fuga, porque es información conocida al calificar. Juntas suman el 31% de la importancia; el resto está distribuido.
+Pesa más el comportamiento reciente de la obligación: el lag del target (28%) y el desenlace de la alternativa previa (25%). El lag no es fuga, porque es información conocida al calificar. La gestión del mes anterior pesó menos de lo que esperaba (1.4%); el resto está distribuido.
 
 Resultado
 El modelo es XGBoost. LightGBM, CatBoost y sus ensambles dieron resultados equivalentes: el desempeño depende más del dataset que del algoritmo. Calificando enero de 2024 en la plataforma, el F1 fue 0.7033.
@@ -29,9 +29,9 @@ Incumplimiento reciente: no se ofrece nuevo acuerdo.
 El cooldown se cuenta en días, para que algo aplicado el 31 de enero no se considere cumplido el 1 de febrero.
 
 Guardrails, trazabilidad y pruebas
-Los guardrails corren antes del LLM y detectan manipulación y contenido sensible en español e inglés, normalizando tildes, mayúsculas y espacios. Cada nodo registra su decisión en una traza. Sin API key, el LLM se reemplaza por un mock determinístico. El sistema agéntico tiene 41 pruebas y el repositorio suma 55. El detalle está en docs/arquitectura/sistema_agentico.md.
+Los guardrails corren antes del LLM y detectan manipulación y contenido sensible en español e inglés, normalizando tildes, mayúsculas y espacios. Cada nodo registra su decisión en una traza. Sin API key, el LLM se reemplaza por un mock determinístico. El sistema agéntico tiene 45 pruebas y el repositorio suma 59. El detalle está en docs/arquitectura/sistema_agentico.md.
 
-Anexo B: uso de inteligencia artificial generativa
+Anexo: uso de inteligencia artificial generativa
 
 Se usó Claude Code como herramienta de apoyo.
 

@@ -30,7 +30,6 @@ PATRONES_MANIPULACION = [
     r"olvida (todo|lo anterior|las reglas|tus reglas)",
     r"sin restricciones",
     r"descuento (especial|no autorizado|por fuera|del \d)",
-    r"(condon|perdon|elimin|quit)\w*.*deuda",
     r"borra (mi|el) (historial|registro)",
     r"elimina (mi|el) (historial|registro)",
     r"dame acceso a",
@@ -41,15 +40,23 @@ PATRONES_MANIPULACION = [
     r"act as (a|an) ",
     r"no restrictions",
     r"unauthorized discount",
-    r"forgive (the|my|all) debt",
     r"you are now",
+]
+
+# Pedir que se condone la deuda no es un intento de manipular al agente: es una
+# solicitud legítima del cliente que el agente no tiene autoridad para conceder.
+# Se escala igual, pero con su propia etiqueta, para que el gestor no reciba al
+# cliente marcado como "manipulación".
+PATRONES_FUERA_DE_POLITICA = [
+    r"(condon|perdon|elimin|quit)\w*.*deuda",
+    r"forgive (the|my|all) debt",
 ]
 
 PATRONES_SENSIBLES = [
     r"demanda|abogado|tutela|denuncia|lawsuit|lawyer",
     r"fraude|robo|hackeo|suplantacion|fraud|hacked|identity theft",
     r"fallec|murio|muerte|death|deceased|died",
-    r"enfermedad (grave|terminal)|cancer|hospitalizado|terminal illness|hospitalized",
+    r"enfermedad (grave|terminal)|cancer|hospitalizad[oa]s?|terminal illness|hospitalized",
     r"suicid|autolesi|self[- ]harm",
     r"queja formal|superintendencia|defensoria del consumidor|formal complaint|regulator",
 ]
@@ -70,6 +77,11 @@ class ResultadoGuardrail:
     intento_manipulacion: bool
     contenido_sensible: bool
     razon: str | None
+    fuera_de_politica: bool = False
+
+    @property
+    def requiere_escalamiento(self) -> bool:
+        return self.intento_manipulacion or self.contenido_sensible or self.fuera_de_politica
 
 
 def evaluar_mensaje(mensaje: str | None) -> ResultadoGuardrail:
@@ -77,13 +89,20 @@ def evaluar_mensaje(mensaje: str | None) -> ResultadoGuardrail:
         return ResultadoGuardrail(False, False, None)
     texto = _normalizar(mensaje)
 
+    # Primero lo sensible: una amenaza de demanda o un reporte de fraude debe llegar
+    # al gestor con esa etiqueta, aunque el mismo mensaje también pida condonación.
+    for pat in PATRONES_SENSIBLES:
+        if re.search(pat, texto):
+            return ResultadoGuardrail(False, True, f"Contenido sensible detectado: '{pat}'")
+
     for pat in PATRONES_MANIPULACION:
         if re.search(pat, texto):
             return ResultadoGuardrail(True, False, f"Patrón de manipulación detectado: '{pat}'")
 
-    for pat in PATRONES_SENSIBLES:
+    for pat in PATRONES_FUERA_DE_POLITICA:
         if re.search(pat, texto):
-            return ResultadoGuardrail(False, True, f"Contenido sensible detectado: '{pat}'")
+            return ResultadoGuardrail(False, False, f"Solicitud fuera de política: '{pat}'",
+                                      fuera_de_politica=True)
 
     return ResultadoGuardrail(False, False, None)
 

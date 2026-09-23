@@ -30,7 +30,7 @@ src/
     policies/          Elegibilidad, priorización (NBA) y guardrails
 
 tests/
-  agents/              41 pruebas: reglas de negocio, seguridad e integración
+  agents/              45 pruebas: reglas de negocio, seguridad e integración
   ml/                  14 pruebas de contrato del dataset: esquema y ausencia de fuga
 
 docs/
@@ -62,4 +62,4 @@ los pasos están en los docstrings de cada módulo de `src/ml/`.
 
 ## Sobre el uso de IA generativa
 
-Está en el Anexo B de `docs/tecnico/documento_tecnico.md`.
+Está en el anexo de `docs/tecnico/documento_tecnico.md`.

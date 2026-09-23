@@ -32,14 +32,16 @@ run_demo.py             Demo de punta a punta sobre los escenarios sintéticos
 
 ```
 fetch_state -> guardrails -> [escalate_human | eligibility] -> propension
-            -> decide_action -> respond
+            -> decide_action -> respond [-> escalate_human si el LLM falla]
 ```
 
 **fetch_state** trae el perfil cliente-obligación. En producción vendría del CRM y del core.
 
 **guardrails** corre antes de cualquier llamado al LLM. Detecta manipulación o prompt
 injection, contenido sensible, datos incompletos y restricciones legales. Si algo se
-dispara, va derecho a `escalate_human`.
+dispara, va derecho a `escalate_human`. Lo sensible se evalúa primero, y pedir condonación
+de la deuda se etiqueta como solicitud fuera de política, no como manipulación: es un
+cliente pidiendo algo que el agente no puede conceder, no alguien atacando al agente.
 
 **eligibility** aplica las reglas del negocio: tope de opciones preaprobadas, cooldown de 3
 a 4 meses después de aplicar una opción, nada de acuerdo si ya hay uno vigente, y mora
@@ -112,8 +114,8 @@ el modelo de la Parte 1 como microservicio aparte, con versión y rollback propi
   confirme que la respuesta solo menciona la alternativa y el plazo autorizados, sin montos
   ni promesas por fuera. Es la brecha más importante antes de poner un LLM real de cara al
   cliente.
-- Fallos del LLM envueltos para escalar a un gestor humano, con reintentos acotados y
-  circuit breaker.
+- Hoy, si el LLM falla, el caso ya pasa por `escalate_human`. En producción le sumaría
+  reintentos acotados y circuit breaker.
 
 ### Monitoreo
 

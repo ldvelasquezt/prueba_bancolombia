@@ -42,14 +42,32 @@ def test_perfil_completo_no_marca_nada():
 # --- Pruebas de evasión: variantes que un usuario real o un intento de jailbreak
 # podría usar para tratar de esquivar los patrones literales. ---
 
-def test_manipulacion_sin_tilde_no_se_evade():
+def test_condonacion_sin_tilde_no_se_evade():
     r = evaluar_mensaje("quiero la condonacion de toda la deuda")
-    assert r.intento_manipulacion is True
+    assert r.fuera_de_politica is True
+    assert r.requiere_escalamiento is True
 
 
-def test_manipulacion_con_tilde_tambien_se_detecta():
+def test_condonacion_con_tilde_tambien_se_detecta():
     r = evaluar_mensaje("quiero la condonación de toda la deuda")
-    assert r.intento_manipulacion is True
+    assert r.fuera_de_politica is True
+
+
+def test_pedir_condonacion_no_se_etiqueta_como_manipulacion():
+    r = evaluar_mensaje("necesito que me perdonen la deuda, no tengo trabajo")
+    assert r.intento_manipulacion is False
+    assert r.fuera_de_politica is True
+
+
+def test_sensible_tiene_prioridad_sobre_condonacion():
+    r = evaluar_mensaje("Voy a poner una demanda si no me condonan toda la deuda")
+    assert r.contenido_sensible is True
+
+
+def test_hospitalizacion_cubre_genero_y_plural():
+    for m in ["Mi mamá está hospitalizada", "mis papás están hospitalizados",
+              "estuve hospitalizado", "mis hijas están hospitalizadas"]:
+        assert evaluar_mensaje(m).contenido_sensible is True, m
 
 
 def test_manipulacion_en_ingles_se_detecta():
@@ -69,7 +87,7 @@ def test_manipulacion_mayusculas_no_se_evade():
 
 def test_sinonimo_condonar_perdonar_se_detecta():
     r = evaluar_mensaje("necesito que me perdonen toda la deuda")
-    assert r.intento_manipulacion is True
+    assert r.fuera_de_politica is True
 
 
 def test_contenido_sensible_defensoria_consumidor():

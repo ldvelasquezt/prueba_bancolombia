@@ -21,7 +21,7 @@ Nodos:
   7. escalate_human    -> nodo terminal para los casos que requieren un gestor
 
 Transiciones: fetch_state -> guardrails -> (escalate_human | eligibility) ->
-propension -> decide_action -> respond
+propension -> decide_action -> respond -> (END | escalate_human si el LLM falla)
 """
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ def build_graph(store: CustomerStore | None = None):
         g = evaluar_mensaje(state.get("mensaje_cliente"))
         razon_datos = datos_incompletos_o_contradictorios(state.get("raw_profile"))
 
-        requiere_escalamiento = g.intento_manipulacion or g.contenido_sensible or razon_datos is not None
+        requiere_escalamiento = g.requiere_escalamiento or razon_datos is not None
         razon = g.razon or razon_datos
         return {
             "requiere_escalamiento": requiere_escalamiento,
@@ -158,7 +158,13 @@ def build_graph(store: CustomerStore | None = None):
     graph.add_edge("eligibility", "propension")
     graph.add_edge("propension", "decide_action")
     graph.add_edge("decide_action", "respond")
-    graph.add_edge("respond", END)
+    # Si el LLM falla, `respond` marca el escalamiento y el caso termina en
+    # `escalate_human`, igual que cualquier otro escalamiento.
+    graph.add_conditional_edges(
+        "respond",
+        lambda s: "escalate_human" if s.get("requiere_escalamiento") else END,
+        {"escalate_human": "escalate_human", END: END},
+    )
     graph.add_edge("escalate_human", END)
 
     return graph.compile()

@@ -88,7 +88,7 @@ que quien lo consuma sepa cuándo confiar menos.
 ## 5. Monitoreo
 
 Seguiría la distribución de las features que más pesan (`lag1_var_rpta_alt`,
-`prob_propension_roll6m`, la mora) mes contra mes frente a la de entrenamiento, con alerta
+`prob_prob_propension_roll6m`, la mora) mes contra mes frente a la de entrenamiento, con alerta
 si se desvía de un umbral.
 
 El desempeño real solo se sabe un mes después, cuando llega el `var_rpta_alt` verdadero.
