@@ -43,12 +43,11 @@ requirements.txt       Dependencias (Python 3.12 con venv)
 ## Dónde queda cada entregable
 
 1. **Documento técnico** → `docs/tecnico/documento_tecnico.md`
-2. **Presentación ejecutiva** → va aparte, 16 diapositivas para la sustentación
-3. **Archivo de resultados** → `data/submissions/resultado_prueba.csv` con ID,
+2. **Archivo de resultados** → `data/submissions/resultado_prueba.csv` con ID,
    var_rpta_alt y Prob_uno. El `kaggle_submission.csv` es lo mismo en el formato de
    `sample_submission.csv`, que es el que se sube a la plataforma
-4. **Código y repositorio** → todo esto
-5. **Arquitectura y producción** → `docs/arquitectura/`
+3. **Código y repositorio** → todo esto
+4. **Arquitectura y producción** → `docs/arquitectura/`
 
 ## Para arrancar
 
